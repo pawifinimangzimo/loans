@@ -1,0 +1,128 @@
+data:
+  # File paths
+  latest_path: "data/latest_draw.csv" 
+  historical_path: "data/historical.csv"  # Required (format: MM/DD/YY,N1-N2-N3-N4-N5-N6)
+  upcoming_path: " "      # Optional (same format as historical)
+  stats_dir: "stats/"                    # Directory for analysis files
+  results_dir: "results/"                # Directory for generated number sets
+  
+  # Upcoming draw handling
+  merge_upcoming: true     # Whether to merge upcoming draws into historical data
+  archive_upcoming: true   # Whether to create audit log of processed upcoming draws
+
+validation:  # New section
+  mode: "none"  # Options: "historical", "new_draw", "both", "none"
+  test_draws: 300      # Number of past draws to test against
+  alert_threshold: 4  # Minimum matches to trigger alerts
+  save_report: true   # Generate validation.json
+  sum_margin: 0.15          # ±15% of IQR
+  check_hot_numbers: true
+
+strategy:
+  # Number pool configuration
+  number_pool: 55          # Total numbers in the lottery (1-55)
+  numbers_to_select: 6     # Numbers to pick per set
+  
+  # Weight distribution (must sum to 1.0)
+  frequency_weight: 0.45    # Historical frequency importance (40%)
+  recent_weight: 0.5       # Recent appearances importance (20%)
+  random_weight: 0.05       # Pure randomness component (40%)
+  
+  # Strategic rules
+  low_number_max: 10       # Numbers ≤10 are considered "low"
+  low_number_chance: 0.7   # 70% chance to include ≥1 low number
+  high_prime_min: 35       # Primes >35 are "high primes"
+  high_prime_chance: 0.25  # 25% chance to include 1 high prime
+  
+  # Cold number handling
+  cold_threshold: 30       # Number of past draws to check for cold numbers
+  resurgence_threshold: 2  # Appearances needed to exit "cold" status
+
+output:
+  sets_to_generate: 8     # Number of sets to produce
+  save_analysis: true      # Whether to save statistical reports
+  verbose: true           # Whether to show detailed processing info
+  high_low:
+    decimal_places: 1
+    show_combo_stats: true
+  max_attempts: 100         # Safety limit
+  debug: false  
+  sum_percentiles: true
+
+analysis:
+  default_match_threshold: 4    # Fallback when CLI not provided
+  default_show_top: 5           # Fallback when CLI not provided
+  min_display_matches: 1        # Hide single matches if needed
+  recency_units: draws  # "draws" or "days"
+  recency_bins:
+    hot: 15    # Recent threshold
+    warm: 30   # Semi-recent
+    cold: 31   # Beginning of "cold" range
+  show_combined_stats: true
+
+  gap_analysis:
+    enabled: true
+    mode: auto               # or "manual"
+    auto_threshold: 1.5      # (avg_gap * 1.5 = overdue)
+    manual_threshold: 10     # Fixed draw count (if mode: manual)
+    weight_influence: 0.3    # How much gaps affect set generation (0-1)
+    min_avg_gap: 5           # Ignore frequent numbers
+    trend_lookback: 10    # For trend analysis
+    bin_size: 5           # For distribution charts
+    acceleration_threshold: 0.5
+
+  combined_stats_settings:
+    min_overlap_significance: 0.5
+    freq_cutoff: 20  # Top 20 considered "frequent"
+  top_range: 10
+  combination_analysis:
+    pairs: true
+    triplets: true
+    quadruplets: true
+    quintuplets: true
+    sixtuplets: true 
+  min_combination_count: 2
+  frequency:
+    draws: 1000 
+    min_display: 3
+  primes:
+    draws: 500
+    hot_threshold: 5    
+  high_low:
+    draws: 400          # Middle ground in 300-500 range
+    recency_weight: 0.3
+    low_number_max: 10 
+    enable_ratio_analysis: true
+    alert_threshold: 0.15
+  number_ranges:
+    low_max: 15      # 1-15 = Low
+    mid_max: 30      # 16-30 = Mid 
+    high_max: 45     # 31-45 = High (or 58 for bigger pools)
+    # Optional:
+    dynamic_ranges: true  # Auto-adjust based on number_pool
+ # Add these new sections (keep existing ones)
+mode: auto  # New root-level option
+
+auto:  # New section
+  learning_rate: 0.01
+  decay_factor: 0.97
+
+manual:  # New section
+  strategy:
+    weighting:
+      frequency: 0.4
+      recency: 0.3
+      randomness: 0.3
+      resurgence: 0.1
+    presets:
+      balanced: [0.4, 0.3, 0.2, 0.1]
+      anti_pattern: [0.1, 0.1, 0.8, 0.3]
+
+features:
+  enable_pattern_analysis: false  # Off by default
+  enable_combo_stats: false      # Off by default
+
+pattern_settings:
+  consecutive_weight: 0.3
+  same_last_digit_weight: 0.2
+  prime_weight: 0.1
