@@ -64,7 +64,7 @@ class LotteryAnalyzer:
         #number pool initialization end 
         #mode handler 
         
-        self._validate_gap_analysis_config()  # Add this line
+        self._validate_overdue_analysis_config()  # Add this line
         self.conn = self._init_db()
         self._init_mode_handler()  # Add this line
 
@@ -118,15 +118,15 @@ class LotteryAnalyzer:
         """)
 
         conn.executescript("""
-            CREATE TABLE IF NOT EXISTS number_gaps (
+            CREATE TABLE IF NOT EXISTS number_overdues (
                 number INTEGER PRIMARY KEY,
                 last_seen_date TEXT,
-                current_gap INTEGER DEFAULT 0,
-                avg_gap REAL,
-                max_gap INTEGER,
+                current_overdue INTEGER DEFAULT 0,
+                avg_overdue REAL,
+                max_overdue INTEGER,
                 is_overdue BOOLEAN DEFAULT FALSE
             );
-            CREATE INDEX IF NOT EXISTS idx_overdue ON number_gaps(is_overdue);
+            CREATE INDEX IF NOT EXISTS idx_overdue ON number_overdues(is_overdue);
         """)        
         
         return conn
@@ -163,8 +163,8 @@ class LotteryAnalyzer:
             )
 
             # Move gap analysis initialization AFTER data is loaded
-            if self.config['analysis']['gap_analysis']['enabled']:
-                self._initialize_gap_analysis()
+            if self.config['analysis']['overdue_analysis']['enabled']:
+                self._initialize_overdue_analysis()
    
         except Exception as e:
             raise ValueError(f"Data loading failed: {str(e)}")
@@ -329,54 +329,54 @@ class LotteryAnalyzer:
 # Helpers         
 
 
-    def _verify_gap_analysis(self):
-        """Verify gap analysis data exists"""
+    def _verify_overdue_analysis(self):
+        """Verify overdue analysis data exists"""
         # Check if any gaps recorded at all
         total_numbers = self.conn.execute(
-            "SELECT COUNT(*) FROM number_gaps"
+            "SELECT COUNT(*) FROM number_overdues"
         ).fetchone()[0]
         
         # Check max gaps recorded
-        max_gap = self.conn.execute(
-            "SELECT MAX(current_gap) FROM number_gaps"
+        max_overdue = self.conn.execute(
+            "SELECT MAX(current_overdue) FROM number_overdues"
         ).fetchone()[0]
         
-        print(f"\nGAP ANALYSIS VERIFICATION:")
+        print(f"\nOVERDUE ANALYSIS VERIFICATION:")
         print(f"Total numbers tracked: {total_numbers}/{self.config['strategy']['number_pool']}")
-        print(f"Max current gap: {max_gap}")
-        print(f"Thresholds: Auto={self.config['analysis']['gap_analysis']['auto_threshold']}x avg, Manual={self.config['analysis']['gap_analysis']['manual_threshold']} draws")
+        print(f"Max current gap: {max_overdue}")
+        print(f"Thresholds: Auto={self.config['analysis']['overdue_analysis']['auto_threshold']}x avg, Manual={self.config['analysis']['overdue_analysis']['manual_threshold']} draws")
 
 
-    def debug_gap_status(self):
+    def debug_overdue_status(self):
         """Temporary method to debug gap analysis"""
         query = """
-        SELECT number, current_gap, avg_gap, is_overdue 
-        FROM number_gaps 
-        WHERE is_overdue = TRUE OR current_gap > avg_gap
-        ORDER BY current_gap DESC
+        SELECT number, current_overdue, avg_overdue, is_overdue 
+        FROM number_overdues 
+        WHERE is_overdue = TRUE OR current_overdue > avg_overdue
+        ORDER BY current_overdue DESC
         """
         df = pd.read_sql(query, self.conn)
         print("\nGAP ANALYSIS DEBUG:")
         print(df.to_string())
 
-    def _validate_gap_analysis_config(self):
+    def _validate_overdue_analysis_config(self):
         """Ensure gap_analysis config has all required fields"""
-        gap_config = self.config.setdefault('analysis', {}).setdefault('gap_analysis', {})
-        gap_config.setdefault('enabled', True)  # Default to True since you're using it
-        gap_config.setdefault('mode', 'auto')
-        gap_config.setdefault('auto_threshold', 1.5)
-        gap_config.setdefault('manual_threshold', 10)
-        gap_config.setdefault('weight_influence', 0.3)
+        overdue_config = self.config.setdefault('analysis', {}).setdefault('overdue_analysis', {})
+        overdue_config.setdefault('enabled', True)  # Default to True since you're using it
+        overdue_config.setdefault('mode', 'auto')
+        overdue_config.setdefault('auto_threshold', 1.5)
+        overdue_config.setdefault('manual_threshold', 10)
+        overdue_config.setdefault('weight_influence', 0.3)
 
     def _get_overdue_numbers(self) -> List[int]:
         """Return list of numbers marked as overdue in number_gaps table"""
-        if not self.config['analysis']['gap_analysis']['enabled']:
+        if not self.config['analysis']['overdue_analysis']['enabled']:
             return []
         
-        query = "SELECT number FROM number_gaps WHERE is_overdue = TRUE"
+        query = "SELECT number FROM number_overdues WHERE is_overdue = TRUE"
         return [row[0] for row in self.conn.execute(query)]
         
-    def _calculate_avg_gap(self, num):
+    def _calculate_avg_overdue(self, num):
         """Calculate average gap for a specific number"""
         gaps = self.conn.execute("""
             SELECT julianday(d1.date) - julianday(d2.date) as gap
@@ -583,7 +583,7 @@ class LotteryAnalyzer:
         
     def _init_weights(self):
         """Original function now acts as a fallback shell"""
-        if self.config['analysis']['gap_analysis']['enabled']:
+        if self.config['analysis']['overdue_analysis']['enabled']:
             self._init_weights_hybrid()  # Try hybrid first
         else:
             # Original logic (unchanged)
@@ -625,10 +625,10 @@ class LotteryAnalyzer:
             base_weights[cold_nums] *= (1 + cold_bonus)
 
             # Apply gap analysis (new behavior)
-            if self.config['analysis']['gap_analysis']['enabled']:
+            if self.config['analysis']['overdue_analysis']['enabled']:
                 overdue_nums = set(self._get_overdue_numbers()) - set(cold_nums)  # Avoid overlap
-                gap_boost = self.config['analysis']['gap_analysis']['weight_influence']
-                base_weights[list(overdue_nums)] *= (1 + gap_boost)
+                overdue_boost = self.config['analysis']['overdue_analysis']['weight_influence']
+                base_weights[list(overdue_nums)] *= (1 + overdue_boost)
 
             # Normalize (same as original)
             self.weights = base_weights / base_weights.sum()
@@ -996,11 +996,11 @@ class LotteryAnalyzer:
                 'frequency': pd.Series,
                 'primes': {'avg_primes': float, ...},
                 'high_low': {'pct_with_low': float, ...},
-                'gap_analysis': {  # New section
+                'overdue_analysis': {  # New section
                     'overdue': List[int], 
                     'stats': {
-                        'avg_gap': float,
-                        'max_gap': int,
+                        'avg_overdue': float,
+                        'max_overdue': int,
                         ...
                     },
                     'distribution': dict
@@ -1009,7 +1009,7 @@ class LotteryAnalyzer:
                     'effective_draws': {
                         'primes': int,
                         'high_low': int,
-                        'gap_analysis': int  # New
+                        'overdue_analysis': int  # New
                     }
                 }
             }
@@ -1027,13 +1027,13 @@ class LotteryAnalyzer:
         }
         
         # Conditionally add gap analysis if enabled
-        if self.config['analysis']['gap_analysis']['enabled']:
-            results['gap_analysis'] = {
+        if self.config['analysis']['overdue_analysis']['enabled']:
+            results['overdue_analysis'] = {
                 'overdue': self.get_overdue_numbers(),
-                'stats': self.get_gap_stats(),
-                'distribution': self.get_gap_distribution()
+                'stats': self.get_overdue_stats(),
+                'distribution': self.get_overdue_distribution()
             }
-            results['metadata']['effective_draws']['gap_analysis'] = \
+            results['metadata']['effective_draws']['overdue_analysis'] = \
                 self._get_draw_count()  # Or specific limit if needed
         
         return results
@@ -1107,23 +1107,23 @@ class LotteryAnalyzer:
             logging.error(f"Sum frequency failed: {str(e)}")
             return {'error': 'Sum frequency analysis failed'}
 
-############### GAP ANALYSIS #####################################
+############### OVERDUE ANALYSIS #####################################
 
-    def simulate_gap_thresholds(self):
+    def simulate_overdue_thresholds(self):
         """Test different threshold values"""
         results = []
         for threshold in [1.3, 1.5, 1.7, 2.0]:
-            self.config['analysis']['gap_analysis']['auto_threshold'] = threshold
-            self._initialize_gap_analysis()
+            self.config['analysis']['overdue_analysis']['auto_threshold'] = threshold
+            self._initialize_overdue_analysis()
             overdue = self.get_overdue_numbers()
             results.append({
                 'threshold': threshold,
                 'count': len(overdue),
-                'accuracy': self._test_gap_accuracy(overdue)
+                'accuracy': self._test_overdue_accuracy(overdue)
             })
         return results
 
-    def _test_gap_accuracy(self, numbers: List[int]) -> float:
+    def _test_overdue_accuracy(self, numbers: List[int]) -> float:
         """Check if overdue numbers actually appeared soon after"""
         query = """
         SELECT COUNT(*) FROM draws
@@ -1133,12 +1133,12 @@ class LotteryAnalyzer:
         hits = 0
         for num in numbers:
             last_seen = self.conn.execute(
-                "SELECT last_seen_date FROM number_gaps WHERE number = ?", (num,)
+                "SELECT last_seen_date FROM number_overdues WHERE number = ?", (num,)
             ).fetchone()[0]
             hits += self.conn.execute(query, (num, last_seen, last_seen)).fetchone()[0]
         return hits / len(numbers) if numbers else 0
 
-    def get_gap_trends(self, num: int, lookback=10) -> dict:
+    def get_overdue_trends(self, num: int, lookback=10) -> dict:
         """Calculate gap trend for a specific number"""
         query = """
         WITH appearances AS (
@@ -1159,52 +1159,52 @@ class LotteryAnalyzer:
             (MAX(gap) - MIN(gap)) / COUNT(*)
         FROM gaps
         """
-        avg_gap, trend = self.conn.execute(query, (num, lookback, lookback)).fetchone()
+        avg_overdue, trend = self.conn.execute(query, (num, lookback, lookback)).fetchone()
         return {
             'number': num,
-            'current_gap': self.conn.execute(
-                "SELECT current_gap FROM number_gaps WHERE number = ?", (num,)
+            'current_overdue': self.conn.execute(
+                "SELECT current_overdue FROM number_overdues WHERE number = ?", (num,)
             ).fetchone()[0],
             'trend_slope': round(trend, 2),
             'is_accelerating': trend > 0.5  # Custom threshold
         }
 
-    def get_gap_stats(self) -> dict:
+    def get_overdue_stats(self) -> dict:
         """Calculate comprehensive gap statistics"""
         query = """
-        WITH gap_stats AS (
+        WITH overdue_stats AS (
             SELECT 
                 number,
-                current_gap,
-                avg_gap,
+                current_overdue,
+                avg_overdue,
                 CAST((julianday('now') - julianday(last_seen_date)) AS INTEGER) as days_since_seen
-            FROM number_gaps
+            FROM number_overdues
         )
         SELECT 
-            AVG(current_gap) as avg_gap,
-            MIN(current_gap) as min_gap,
-            MAX(current_gap) as max_gap,
+            AVG(current_overdue) as avg_overdue,
+            MIN(current_overdue) as min_overdue,
+            MAX(current_overdue) as max_overdue,
             AVG(days_since_seen) as avg_days_since,
             SUM(CASE WHEN is_overdue THEN 1 ELSE 0 END) as overdue_count
-        FROM gap_stats
+        FROM overdue_stats
         """
         result = self.conn.execute(query).fetchone()
         return {
-            'average_gap': round(result[0], 1),
-            'min_gap': result[1],
-            'max_gap': result[2],
+            'average_overdue': round(result[0], 1),
+            'min_overdue': result[1],
+            'max_overdue': result[2],
             'avg_days_since_seen': round(result[3], 1),
             'overdue_count': result[4]
         }
 
-    def get_gap_distribution(self, bin_size=5) -> dict:
+    def get_overdue_distribution(self, bin_size=5) -> dict:
         """Bin gaps into ranges for histogram"""
         query = f"""
         SELECT 
-            (current_gap / {bin_size}) * {bin_size} as lower_bound,
+            (current_overdue / {bin_size}) * {bin_size} as lower_bound,
             COUNT(*) as frequency
-        FROM number_gaps
-        GROUP BY (current_gap / {bin_size})
+        FROM number_overdues
+        GROUP BY (current_overdue / {bin_size})
         ORDER BY lower_bound
         """
         return {
@@ -1221,15 +1221,15 @@ class LotteryAnalyzer:
             
         Returns:
             List[int] if enhanced=False (default)
-            List[dict] if enhanced=True {number: int, current_gap: int, trend_slope: float}
+            List[dict] if enhanced=True {number: int, current_overdue: int, trend_slope: float}
         """
-        if not self.config['analysis']['gap_analysis']['enabled']:
+        if not self.config['analysis']['overdue_analysis']['enabled']:
             return [] if not enhanced else [{}]
         
         query = """
-        SELECT number FROM number_gaps 
+        SELECT number FROM number_overdues 
         WHERE is_overdue = TRUE
-        ORDER BY current_gap DESC
+        ORDER BY current_overdue DESC
         LIMIT ?
         """
         top_n = self.config['analysis']['top_range']
@@ -1238,10 +1238,10 @@ class LotteryAnalyzer:
         if enhanced:
             return [{
                 'number': num,
-                'current_gap': self.conn.execute(
-                    "SELECT current_gap FROM number_gaps WHERE number = ?", (num,)
+                'current_overdue': self.conn.execute(
+                    "SELECT current_overdue FROM number_overdues WHERE number = ?", (num,)
                 ).fetchone()[0],
-                'trend_slope': self.get_gap_trends(num)['trend_slope']
+                'trend_slope': self.get_overdue_trends(num)['trend_slope']
             } for num in numbers]
         return numbers
 
@@ -1263,8 +1263,8 @@ class LotteryAnalyzer:
                 continue
         raise ValueError(f"Date '{date_str}' doesn't match any expected formats")
 
-    def _initialize_gap_analysis(self):
-        if not self.config['analysis']['gap_analysis']['enabled']:
+    def _initialize_overdue_analysis(self):
+        if not self.config['analysis']['overdue_analysis']['enabled']:
             return
             
         print("\nINITIALIZING GAP ANALYSIS...")
@@ -1277,7 +1277,7 @@ class LotteryAnalyzer:
         
         # 2. Initialize table with ALL pool numbers
         self.conn.executemany(
-            "INSERT OR IGNORE INTO number_gaps (number) VALUES (?)",
+            "INSERT OR IGNORE INTO number_overdues (number) VALUES (?)",
             [(n,) for n in self.number_pool]
         )
         
@@ -1313,43 +1313,43 @@ class LotteryAnalyzer:
             ).fetchone()[0]
             try:
                 latest_date = self._parse_date(latest_date_str)
-                current_gap = (latest_date - date_objs[-1]).days
+                current_overdue = (latest_date - date_objs[-1]).days
             except ValueError as e:
                 print(f"⚠️ Failed to calculate gap for number {num}: {e}")
                 continue
             
             # Calculate historical average gap
             if len(date_objs) > 1:
-                gaps = [(date_objs[i+1] - date_objs[i]).days 
+                overdues = [(date_objs[i+1] - date_objs[i]).days 
                        for i in range(len(date_objs)-1)]
-                avg_gap = sum(gaps) / len(gaps)
+                avg_overdue = sum(overdues) / len(overdues)
             else:
-                avg_gap = current_gap
+                avg_overdue = current_overdue
                 
             # Determine overdue status
-            mode = self.config['analysis']['gap_analysis']['mode']
-            auto_thresh = self.config['analysis']['gap_analysis']['auto_threshold']
-            manual_thresh = self.config['analysis']['gap_analysis']['manual_threshold']
+            mode = self.config['analysis']['overdue_analysis']['mode']
+            auto_thresh = self.config['analysis']['overdue_analysis']['auto_threshold']
+            manual_thresh = self.config['analysis']['overdue_analysis']['manual_threshold']
             
-            is_overdue = (current_gap >= manual_thresh) if mode == 'manual' else (
-                         current_gap >= avg_gap * auto_thresh)
+            is_overdue = (current_overdue >= manual_thresh) if mode == 'manual' else (
+                         current_overdue >= avg_overdue * auto_thresh)
             
             # Update record
             self.conn.execute("""
-                UPDATE number_gaps
+                UPDATE number_overdues
                 SET last_seen_date = ?,
-                    current_gap = ?,
-                    avg_gap = ?,
+                    current_overdue = ?,
+                    avg_overdue = ?,
                     is_overdue = ?
                 WHERE number = ?
-            """, (last_seen, current_gap, avg_gap, int(is_overdue), num))
+            """, (last_seen, current_overdue, avg_overdue, int(is_overdue), num))
         
-        self._verify_gap_analysis()
+        self._verify_overdue_analysis()
 
 ###############
-    def update_gap_stats(self):
+    def update_overdue_stats(self):
         """Update gap statistics after new draws"""
-        if not self.config['analysis']['gap_analysis']['enabled']:
+        if not self.config['analysis']['overdue_analysis']['enabled']:
             return
             
         # Get latest draw date and numbers
@@ -1364,29 +1364,29 @@ class LotteryAnalyzer:
         
         # Update gaps for all numbers
         self.conn.execute("""
-            UPDATE number_gaps 
-            SET current_gap = current_gap + 1,
+            UPDATE number_overdues 
+            SET current_overdue = current_overdue + 1,
                 is_overdue = CASE
-                    WHEN ? = 'manual' THEN current_gap + 1 >= ?
-                    ELSE current_gap + 1 >= avg_gap * ?
+                    WHEN ? = 'manual' THEN current_overdue + 1 >= ?
+                    ELSE current_overdue + 1 >= avg_overdue * ?
                 END
         """, (
-            self.config['analysis']['gap_analysis']['mode'],
-            self.config['analysis']['gap_analysis']['manual_threshold'],
-            self.config['analysis']['gap_analysis']['auto_threshold']
+            self.config['analysis']['overdue_analysis']['mode'],
+            self.config['analysis']['overdue_analysis']['manual_threshold'],
+            self.config['analysis']['overdue_analysis']['auto_threshold']
         ))
         
         # Reset gaps for numbers in latest draw
         self.conn.executemany("""
-            UPDATE number_gaps 
+            UPDATE number_overdues 
             SET last_seen_date = ?,
-                current_gap = 0,
+                current_overdue = 0,
                 is_overdue = FALSE
             WHERE number = ?
         """, [(latest_date, num) for num in latest_nums])
         
         # Recalculate average gaps
-        self._recalculate_avg_gaps()
+        self._recalculate_avg_overdues()
 
 ###########################################################################
 ########################
@@ -1680,8 +1680,8 @@ def main():
         analyzer = LotteryAnalyzer(config)
         # Load and validate data
         analyzer.load_data()
-        #if analyzer.config['analysis']['gap_analysis']['enabled']:
-        #    analyzer.debug_gap_status()
+        #if analyzer.config['analysis']['overdue_analysis']['enabled']:
+        #    analyzer.debug_overdue_status()
         # Get analysis results
         freqs = analyzer.get_frequencies()
         temps = analyzer.get_temperature_stats()
@@ -1722,7 +1722,7 @@ def main():
 
         # New Overdue Numbers Section
             if overdue:
-                print(f"\n⏰ Overdue Numbers ({config['analysis']['gap_analysis']['manual_threshold']}+ draws unseen):")
+                print(f"\n⏰ Overdue Numbers ({config['analysis']['overdue_analysis']['manual_threshold']}+ draws unseen):")
                 print(f"   Numbers: {', '.join(map(str, overdue))}")
                 # Get primes from overdue numbers
                 overdue_primes = [n for n in overdue if analyzer._is_prime(n)]
@@ -1824,7 +1824,7 @@ def main():
                 # Strategy breakdown
                 cold_nums = [n for n in s['numbers'] if n in analyzer.get_temperature_stats()['cold']]
                 overdue_nums = []
-                if analyzer.config['analysis']['gap_analysis']['enabled']:
+                if analyzer.config['analysis']['overdue_analysis']['enabled']:
                     overdue_nums = [n for n in s['numbers'] if n in analyzer._get_overdue_numbers()]
                 
                 print(f"   • Strategy: {len(cold_nums)} cold ({','.join(map(str, cold_nums))}), "
