@@ -441,22 +441,17 @@ class LotteryAnalyzer:
                 notes.append(f"Sum: {total} (Optimal range: {int(q1)}-{int(q3)})")
 ################ New Section ################
 
-        # Neutral odd-even validation
-        if self.config['analysis']['patterns']['odd_even']['enabled']:
+        if self.config.get('analysis', {}).get('patterns', {}).get('odd_even', {}).get('enabled', False):
             even_count = sum(1 for n in numbers if n % 2 == 0)
             even_pct = (even_count / len(numbers)) * 100
             ideal = self.config['analysis']['patterns']['odd_even']['ideal_range']
+            balanced = ideal[0] <= even_pct <= ideal[1]
             
-            balance_status = (
-                "Balanced" if ideal[0] <= even_pct <= ideal[1]
-                else f"Unbalanced - ideal {ideal[0]}-{ideal[1]}%"
-            )               
             notes.append(
                 f"Even/Odd: {even_count} even, {len(numbers)-even_count} odd "
                 f"({even_pct:.1f}% | {'Balanced' if balanced else f'Unbalanced (ideal {ideal[0]}-{ideal[1]}%)'})"
             )
 
-                
 #############################################
         # 2. Hot numbers (optional)
         if self.config['validation'].get('check_hot_numbers', True):
