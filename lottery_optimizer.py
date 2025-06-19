@@ -716,6 +716,22 @@ class LotteryAnalyzer:
         }
 #######Detect Patterns Update ####### 
 
+    def display_optimized_sets(self, sets: List[Dict]):
+        print("\n=== OPTIMIZED SETS ===")
+        for i, s in enumerate(sets, 1):
+            # Number range calculation
+            low = sum(1 for n in s['numbers'] if n <= 10)  # Adjust threshold as needed
+            mid = sum(1 for n in s['numbers'] if 10 < n <= 30)
+            high = len(s['numbers']) - low - mid
+            
+            print(f"{i}. {'-'.join(map(str, s['numbers']))}")
+            print(f"   - Sum: {s['sum']} (Within optimal {s['notes'][0].split(':')[1].split('|')[1].strip()})")
+            print(f"   - {next(n for n in s['notes'] if 'Even/Odd' in n)}")
+            print(f"   - Hot Numbers: {len([n for n in s['numbers'] if n in self.get_temperature_stats()['hot']])}")
+            print(f"   - Cold Numbers: {len([n for n in s['numbers'] if n in self.get_temperature_stats()['cold']])}")
+            print(f"   - Overdue Numbers: {len([n for n in s['numbers'] if n in self._get_overdue_numbers()])}")
+            print(f"   - Number Range: {low} Low, {mid} Mid, {high} High\n")
+
     def display_pattern_analysis(self, patterns: Dict):
         """Formatted output for pattern analysis"""
         print("\n=== PATTERN ANALYSIS ===")
@@ -1832,14 +1848,8 @@ def main():
                         combos = analyzer._tag_prime_combos(combos, size)
 
             # ============ INSERT NEW FEATURE OUTPUTS HERE ============
-            if feature_results['patterns']:
-                print("\n" + "="*50)
-                print(" NUMBER PATTERNS ".center(50, "="))
-                p = feature_results['patterns']
-                print(f"Consecutive numbers: {p['consecutive']:.1f}%")
-                print(f"Same last digit: {p['same_ending']:.1f}%")
-                print(f"All even/odd: {p['all_even_odd']:.1f}%")
-                print(f"Avg primes: {p['avg_primes']:.1f}")
+##### Pattern Analysis ####
+###########################
 
             if feature_results['stats'][2] or feature_results['stats'][3]:
                 print("\n" + "="*50)
@@ -1886,23 +1896,11 @@ def main():
 
             valid_sets = analyzer.generate_valid_sets()
 
-            print("\n=== OPTIMIZED SETS ===")
-            for i, s in enumerate(valid_sets, 1):
-                # Main numbers (clean format)
-                print(f"{i}. {'-'.join(map(str, s['numbers']))}")
-                
-                # Existing notes (sum, hot numbers)
-                for note in s['notes']:
-                    print(f"   • {note}")
-                
-                # Strategy breakdown
-                cold_nums = [n for n in s['numbers'] if n in analyzer.get_temperature_stats()['cold']]
-                overdue_nums = []
-                if analyzer.config['analysis']['overdue_analysis']['enabled']:
-                    overdue_nums = [n for n in s['numbers'] if n in analyzer._get_overdue_numbers()]
-                
-                print(f"   • Strategy: {len(cold_nums)} cold ({','.join(map(str, cold_nums))}), "
-                      f"{len(overdue_nums)} overdue ({','.join(map(str, overdue_nums))})")
+            # NEW INTEGRATION POINT (replaces deleted code)
+            patterns = analyzer.detect_patterns()
+            if not args.quiet:
+                analyzer.display_pattern_analysis(patterns)
+                analyzer.display_optimized_sets(valid_sets)
 
         # Save files
         results_path = analyzer.save_results(sets)
