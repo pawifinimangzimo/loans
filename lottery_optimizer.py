@@ -716,6 +716,49 @@ class LotteryAnalyzer:
         }
 #######Detect Patterns Update ####### 
 
+    def display_pattern_analysis(self, patterns: Dict):
+        """Formatted output for pattern analysis"""
+        print("\n=== PATTERN ANALYSIS ===")
+        
+        # Even/Odd
+        if 'even_odd' in patterns:
+            eo = patterns['even_odd']
+            print("Even/Odd Distribution:")
+            print(f"- Current Sets: {eo['balanced_sets']} balanced, {eo['total_sets']-eo['balanced_sets']} unbalanced")
+            print(f"- Recent Draws: {round(eo['even_count']/(eo['total_sets']*6)*100)}% even ({eo['total_sets']}-draw average)")
+            print(f"- Ideal Range: {eo['ideal_range'][0]}-{eo['ideal_range'][1]}% even numbers\n")
+
+        # Primes
+        if 'primes' in patterns:
+            p = patterns['primes']
+            print("Prime Numbers:")
+            print(f"- Avg per set: {p['avg']} (Ideal {p['ideal'][0]}-{p['ideal'][1]})")
+            print(f"- Hot Primes: {', '.join(map(str, p['hot'])) or 'None'}\n")
+
+        # Consecutives
+        if 'consecutives' in patterns:
+            c = patterns['consecutives']
+            print("Consecutives:")
+            print(f"- {c['found']} pair {'(Below max ' + str(c['max_allowed']) if c['found'] <= c['max_allowed'] else '(WARNING: Exceeds limit)'}\n")
+
+        # Digit Endings
+        if 'digit_endings' in patterns:
+            print("Digit Endings:")
+            print(f"- {patterns['digit_endings']} ({'No repeats' if len(set(patterns['digit_endings'])) == 6 else 'Repeats found'})\n")
+
+        # Sum and Ranges
+        if 'sum_stats' in patterns:
+            s = patterns['sum_stats']
+            print("Sum:")
+            print(f"- {s['average']} ({s['q1']}-{s['q3']} optimal range)\n")
+
+        if 'number_ranges' in patterns:
+            nr = patterns['number_ranges']
+            print("Number Ranges:")
+            print(f"- Low: {nr['counts']['low']}")
+            print(f"- Mid: {nr['counts']['mid']}")
+            print(f"- High: {nr['counts']['high']}")
+###################### End pattern Display ###################
     def detect_patterns(self) -> Dict:
         """Enhanced pattern detection with all required metrics"""
         if not self.config.get('features', {}).get('enable_pattern_analysis', False):
