@@ -439,20 +439,7 @@ class LotteryAnalyzer:
                 )
             else:
                 notes.append(f"Sum: {total} (Optimal range: {int(q1)}-{int(q3)})")
-################ New Section ################
 
-        if self.config['analysis']['patterns']['odd_even']['enabled']:
-            even_count = sum(1 for n in numbers if n % 2 == 0)
-            even_pct = (even_count / len(numbers)) * 100
-            ideal = self.config['analysis']['patterns']['odd_even']['ideal_range']
-            balanced = ideal[0] <= even_pct <= ideal[1]  # New variable for clarity
-            
-            notes.append(
-                f"Even/Odd: {even_count} even, {len(numbers)-even_count} odd "
-                f"({even_pct:.1f}% | {'Balanced' if balanced else f'Unbalanced (ideal {ideal[0]}-{ideal[1]}%)'})"
-            )
-            
-#############################################
         # 2. Hot numbers (optional)
         if self.config['validation'].get('check_hot_numbers', True):
             hot_nums = [n for n in numbers if n in self.get_temperature_stats()['hot']]
@@ -754,16 +741,6 @@ class LotteryAnalyzer:
                 'prime_count': []
             }
 
-            # ===== NEW ODD-EVEN ANALYSIS =====
-            if self.config.get('analysis', {}).get('patterns', {}).get('odd_even', {}).get('enabled', False):
-                even_stats = {
-                    'total_evens': 0,
-                    'total_numbers': 0,
-                    'balanced_draws': 0
-                }
-                ideal_range = self.config['analysis']['patterns']['odd_even']['ideal_range']
-            # ===== END NEW CODE =====
-
             for _, row in recent.iterrows():
                 nums = sorted(row.tolist())
                 diffs = [nums[i+1] - nums[i] for i in range(5)]
@@ -784,16 +761,7 @@ class LotteryAnalyzer:
                 # Count prime numbers
                 primes = [n for n in nums if self._is_prime(n)]
                 patterns['prime_count'].append(len(primes))
-
-                # ===== NEW IN-LOOP CALCULATION =====
-                if 'even_stats' in locals():
-                    even_count = sum(1 for n in nums if n % 2 == 0)
-                    even_stats['total_evens'] += even_count
-                    even_stats['total_numbers'] += len(nums)
-                    if ideal_range[0] <= (even_count/len(nums))*100 <= ideal_range[1]:
-                        even_stats['balanced_draws'] += 1
-                # ===== END NEW CODE =====
-
+            
             # Convert to percentages
             total_draws = len(recent)
             if total_draws > 0:
@@ -801,15 +769,6 @@ class LotteryAnalyzer:
                 patterns['same_ending'] = (patterns['same_ending'] / total_draws) * 100
                 patterns['all_even_odd'] = (patterns['all_even_odd'] / total_draws) * 100
                 patterns['avg_primes'] = np.mean(patterns['prime_count']) if patterns['prime_count'] else 0
-                
-            # ===== FINAL CALCULATION =====
-            if 'even_stats' in locals() and even_stats['total_numbers'] > 0:
-                patterns['even_odd'] = {
-                    'historical_avg': round((even_stats['total_evens'] / even_stats['total_numbers']) * 100, 1),
-                    'balanced_pct': round((even_stats['balanced_draws'] / len(recent)) * 100, 1),
-                    'ideal_range': ideal_range
-                }
-            # ===== END NEW CODE =====
                 
             return patterns
 
@@ -1799,7 +1758,6 @@ def main():
                         combos = analyzer._tag_prime_combos(combos, size)
 
             # ============ INSERT NEW FEATURE OUTPUTS HERE ============
-            patterns = self.detect_patterns() or {}
             if feature_results['patterns']:
                 print("\n" + "="*50)
                 print(" NUMBER PATTERNS ".center(50, "="))
@@ -1808,15 +1766,6 @@ def main():
                 print(f"Same last digit: {p['same_ending']:.1f}%")
                 print(f"All even/odd: {p['all_even_odd']:.1f}%")
                 print(f"Avg primes: {p['avg_primes']:.1f}")
-
-            if 'even_odd' in patterns:
-                print(f"\nEven/Odd Distribution:")
-                print(f"- Historical Average: {patterns['even_odd']['historical_avg']}% even")
-                print(f"- Balanced Draws: {patterns['even_odd']['balanced_pct']}% within ideal range")
-                print(f"- Target Range: {patterns['even_odd']['ideal_range'][0]}-{patterns['even_odd']['ideal_range'][1]}% even")
-            else:
-                print("\nEven/Odd: Analysis disabled")
-
 
             if feature_results['stats'][2] or feature_results['stats'][3]:
                 print("\n" + "="*50)
