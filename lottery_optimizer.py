@@ -714,63 +714,78 @@ class LotteryAnalyzer:
             'hot_primes': sorted(n for n in temp_stats['hot'] if n in primes),
             'cold_primes': sorted(n for n in temp_stats['cold'] if n in primes)
         }
+#######Detect Patterns Update ####### 
 
     def detect_patterns(self) -> Dict:
-        if not self.config['analysis']['patterns']['enabled']:
-            return {}
-        """Analyze historical draws for common number patterns.
-        Returns: {
-            'consecutive': float (percentage),
-            'same_ending': float,
-            'all_even_odd': float,
-            'avg_primes': float,
-            'prime_count': list[int]
-        }
-        """
-        # Feature gate check
+        """Enhanced pattern detection with all required metrics"""
         if not self.config.get('features', {}).get('enable_pattern_analysis', False):
             return {}
 
         try:
-            # Get last 100 draws (configurable amount)
             limit = self.config.get('pattern_settings', {}).get('sample_size', 100)
-            query = f"""
+            recent = pd.read_sql(f"""
                 SELECT n1, n2, n3, n4, n5, n6 FROM draws
                 ORDER BY date DESC
                 LIMIT {limit}
-            """
-            recent = pd.read_sql(query, self.conn)
+            """, self.conn)
             
-            # Initialize counters
+            # Initialize combined pattern tracking
             patterns = {
+                # Existing metrics
                 'consecutive': 0,
                 'same_ending': 0,
-                'all_even_odd': 0 if self.config.get('analysis', {}).get('patterns', {}).get('odd_even', {}).get('enabled', True) else None,
-                'prime_count': []
+                'all_even_odd': 0,
+                'prime_count': [],
+                'avg_primes': 0,
+                
+                # New enhanced metrics
+                'even_odd': {
+                    'balanced_sets': 0,
+                    'total_sets': 0,
+                    'even_count': 0,
+                    'ideal_range': self.config['analysis']['patterns']['odd_even']['ideal_range']
+                },
+                'primes_enhanced': {
+                    'hot': [],
+                    'ideal': [1, 3]
+                },
+                'consecutives_max': 0,
+                'digit_endings': [],
+                'sum_stats': self.get_sum_stats(),
+                'number_ranges': self.get_number_ranges_stats()
             }
 
             for _, row in recent.iterrows():
                 nums = sorted(row.tolist())
                 diffs = [nums[i+1] - nums[i] for i in range(5)]
                 
-                # Check for consecutive numbers
+                # Existing checks
                 if any(d == 1 for d in diffs):
                     patterns['consecutive'] += 1
                     
-                # Check for same last digits
                 last_digits = [n % 10 for n in nums]
-                if len(set(last_digits)) < 3:  # At least 3 numbers share digit
+                if len(set(last_digits)) < 3:
                     patterns['same_ending'] += 1
                     
-                # Check all even or all odd
                 if all(n % 2 == 0 for n in nums) or all(n % 2 == 1 for n in nums):
                     patterns['all_even_odd'] += 1
                     
-                # Count prime numbers
                 primes = [n for n in nums if self._is_prime(n)]
                 patterns['prime_count'].append(len(primes))
-            
-            # Convert to percentages
+                
+                # New enhanced checks
+                even_count = sum(1 for n in nums if n % 2 == 0)
+                patterns['even_odd']['even_count'] += even_count
+                patterns['even_odd']['total_sets'] += 1
+                if patterns['even_odd']['ideal_range'][0] <= (even_count/len(nums))*100 <= patterns['even_odd']['ideal_range'][1]:
+                    patterns['even_odd']['balanced_sets'] += 1
+                    
+                patterns['primes_enhanced']['hot'].extend(p for p in primes if p in self.get_temperature_stats()['hot'])
+                patterns['consecutives_max'] = max(patterns['consecutives_max'], 
+                                                 sum(1 for i in range(len(nums)-1) if nums[i+1] - nums[i] == 1))
+                patterns['digit_endings'].append(''.join(str(n%10) for n in nums))
+
+            # Final calculations
             total_draws = len(recent)
             if total_draws > 0:
                 patterns['consecutive'] = (patterns['consecutive'] / total_draws) * 100
@@ -778,11 +793,15 @@ class LotteryAnalyzer:
                 patterns['all_even_odd'] = (patterns['all_even_odd'] / total_draws) * 100
                 patterns['avg_primes'] = np.mean(patterns['prime_count']) if patterns['prime_count'] else 0
                 
+                patterns['primes_enhanced']['hot'] = sorted(list(set(patterns['primes_enhanced']['hot'])))
+                patterns['digit_endings'] = ' '.join(sorted(set(patterns['digit_endings'][0]))) if patterns['digit_endings'] else 'N/A'
+            
             return patterns
 
         except Exception as e:
-            logging.warning(f"Pattern detection failed: {str(e)}")
+            logging.error(f"Pattern detection failed: {str(e)}")
             return {}
+
 ######
 
     def _get_prime_subsets(self, numbers: List[int]) -> List[int]:
