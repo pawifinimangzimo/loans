@@ -440,6 +440,12 @@ class LotteryAnalyzer:
             else:
                 notes.append(f"Sum: {total} (Optimal range: {int(q1)}-{int(q3)})")
 
+        if self.config['analysis']['patterns']['odd_even']['enabled']:
+            even_count = sum(1 for n in numbers if n % 2 == 0)
+            if even_count == 0 or even_count == len(numbers):
+                notes.append(f"Warning: All {'odd' if even_count==0 else 'even'} numbers")
+
+
         # 2. Hot numbers (optional)
         if self.config['validation'].get('check_hot_numbers', True):
             hot_nums = [n for n in numbers if n in self.get_temperature_stats()['hot']]
