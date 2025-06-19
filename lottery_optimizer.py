@@ -439,7 +439,17 @@ class LotteryAnalyzer:
                 )
             else:
                 notes.append(f"Sum: {total} (Optimal range: {int(q1)}-{int(q3)})")
+################ New Section ################
 
+        # Add this near other validation checks
+        if self.config['analysis']['patterns']['odd_even']['enabled']:
+            even_count = sum(1 for n in numbers if n % 2 == 0)
+            even_pct = (even_count / len(numbers)) * 100
+            ideal = self.config['analysis']['patterns']['odd_even']['ideal_range']
+            if not (ideal[0] <= even_pct <= ideal[1]):
+                notes.append(f"Even%: {even_pct:.0f}% (ideal {ideal[0]}-{ideal[1]}%)")
+
+#############################################
         # 2. Hot numbers (optional)
         if self.config['validation'].get('check_hot_numbers', True):
             hot_nums = [n for n in numbers if n in self.get_temperature_stats()['hot']]

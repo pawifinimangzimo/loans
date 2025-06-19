@@ -100,6 +100,24 @@ analysis:
     high_max: 45     # 31-45 = High (or 58 for bigger pools)
     # Optional:
     dynamic_ranges: true  # Auto-adjust based on number_pool
+    
+    ########### Future Sections #########
+    
+  patterns:  # New umbrella section
+    enabled: true  # Master switch
+    alert_level: "warn"  # none|warn|reject
+    
+    odd_even:  # New explicit control
+      enabled: true
+      ideal_range: [30, 70]  # Min-max % of even numbers
+      strict: false  # If true, rejects all-even/odd sets
+    
+    # Keep existing pattern settings (they'll still work)
+    consecutive_weight: 0.3 
+    same_last_digit_weight: 0.2
+    prime_weight: 0.1
+    
+    #####################################
  # Add these new sections (keep existing ones)
 mode: auto  # New root-level option
 
@@ -119,8 +137,8 @@ manual:  # New section
       anti_pattern: [0.1, 0.1, 0.8, 0.3]
 
 features:
-  enable_pattern_analysis: false  # Off by default
-  enable_combo_stats: false      # Off by default
+  enable_pattern_analysis: true  # Off by default
+  enable_combo_stats: true      # Off by default
 
 pattern_settings:
   consecutive_weight: 0.3
