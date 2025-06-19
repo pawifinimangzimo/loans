@@ -1900,7 +1900,7 @@ def main():
             patterns = analyzer.detect_patterns()
             if not args.quiet:
                 analyzer.display_pattern_analysis(patterns)
-                analyzer.display_optimized_sets(valid_sets)
+                #analyzer.display_optimized_sets(valid_sets)
 
         # Save files
         results_path = analyzer.save_results(sets)
