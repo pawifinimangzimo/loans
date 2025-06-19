@@ -710,6 +710,8 @@ class LotteryAnalyzer:
         }
 
     def detect_patterns(self) -> Dict:
+         if not self.config['analysis']['patterns']['enabled']:
+            return {}
         """Analyze historical draws for common number patterns.
         Returns: {
             'consecutive': float (percentage),
@@ -737,7 +739,7 @@ class LotteryAnalyzer:
             patterns = {
                 'consecutive': 0,
                 'same_ending': 0,
-                'all_even_odd': 0,
+                'all_even_odd': 0 if self.config.get('analysis', {}).get('patterns', {}).get('odd_even', {}).get('enabled', True) else None,
                 'prime_count': []
             }
 
@@ -1620,6 +1622,10 @@ def load_config(config_path: str = 'config.yaml') -> Dict:
                     d1[k] = v
         merged = DEFAULT_CONFIG.copy()
         merge(merged, config)
+        
+        if 'features' in config and 'enable_pattern_analysis' in config['features']:
+            config['analysis']['patterns']['enabled'] = config['features']['enable_pattern_analysis']
+        
         return merged
     except Exception:
         return DEFAULT_CONFIG
