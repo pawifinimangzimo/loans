@@ -717,20 +717,61 @@ class LotteryAnalyzer:
 #######Detect Patterns Update ####### 
 
     def display_optimized_sets(self, sets: List[Dict]):
+        """Safe display of optimized sets with proper error handling"""
+        if not sets:
+            print("\n=== OPTIMIZED SETS ===\nNo valid sets generated")
+            return
+
         print("\n=== OPTIMIZED SETS ===")
+        
         for i, s in enumerate(sets, 1):
-            # Number range calculation
-            low = sum(1 for n in s['numbers'] if n <= 10)  # Adjust threshold as needed
-            mid = sum(1 for n in s['numbers'] if 10 < n <= 30)
-            high = len(s['numbers']) - low - mid
-            
-            print(f"{i}. {'-'.join(map(str, s['numbers']))}")
-            print(f"   - Sum: {s['sum']} (Within optimal {s['notes'][0].split(':')[1].split('|')[1].strip()})")
-            print(f"   - {next(n for n in s['notes'] if 'Even/Odd' in n)}")
-            print(f"   - Hot Numbers: {len([n for n in s['numbers'] if n in self.get_temperature_stats()['hot']])}")
-            print(f"   - Cold Numbers: {len([n for n in s['numbers'] if n in self.get_temperature_stats()['cold']])}")
-            print(f"   - Overdue Numbers: {len([n for n in s['numbers'] if n in self._get_overdue_numbers()])}")
-            print(f"   - Number Range: {low} Low, {mid} Mid, {high} High\n")
+            try:
+                # Safely extract numbers and sum
+                numbers = s.get('numbers', [])
+                sum_total = s.get('sum', 0)
+                
+                # Number range calculation (using config thresholds)
+                low_max = self.config['strategy'].get('low_number_max', 10)
+                mid_max = low_max * 2  # Or use config value
+                
+                low = sum(1 for n in numbers if n <= low_max)
+                mid = sum(1 for n in numbers if low_max < n <= mid_max)
+                high = len(numbers) - low - mid
+                
+                # Safely parse notes
+                sum_note = next((n for n in s.get('notes', []) if 'Sum:' in n), "Sum: N/A")
+                even_odd_note = next((n for n in s.get('notes', []) if 'Even/Odd' in n), None)
+                
+                # Display set information
+                print(f"{i}. {'-'.join(map(str, numbers))}")
+                
+                # Sum note (with fallback)
+                if '|' in sum_note:
+                    print(f"   - Sum: {sum_total} {sum_note.split('|')[1].strip()}")
+                else:
+                    print(f"   - Sum: {sum_total} (Optimal range)")
+                
+                # Even/Odd note if available
+                if even_odd_note:
+                    print(f"   - {even_odd_note}")
+                
+                # Number stats
+                hot_nums = [n for n in numbers if n in self.get_temperature_stats()['hot']]
+                cold_nums = [n for n in numbers if n in self.get_temperature_stats()['cold']]
+                overdue_nums = self._get_overdue_numbers() if hasattr(self, '_get_overdue_numbers') else []
+                
+                print(f"   - Hot Numbers: {len(hot_nums)} ({', '.join(map(str, hot_nums)) if hot_nums else 'None'})")
+                print(f"   - Cold Numbers: {len(cold_nums)} ({', '.join(map(str, cold_nums)) if cold_nums else 'None'})")
+                
+                if overdue_nums:
+                    print(f"   - Overdue Numbers: {len(overdue_nums)} ({', '.join(map(str, overdue_nums))})")
+                
+                print(f"   - Number Range: {low} Low, {mid} Mid, {high} High\n")
+                
+            except Exception as e:
+                print(f"   - Error displaying set {i}: {str(e)}")
+                continue
+
 
     def display_pattern_analysis(self, patterns: Dict):
         """Formatted output for pattern analysis"""
