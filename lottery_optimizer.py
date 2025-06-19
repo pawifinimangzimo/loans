@@ -1799,6 +1799,7 @@ def main():
                         combos = analyzer._tag_prime_combos(combos, size)
 
             # ============ INSERT NEW FEATURE OUTPUTS HERE ============
+            patterns = self.detect_patterns() or {}
             if feature_results['patterns']:
                 print("\n" + "="*50)
                 print(" NUMBER PATTERNS ".center(50, "="))
