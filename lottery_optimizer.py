@@ -710,7 +710,7 @@ class LotteryAnalyzer:
         }
 
     def detect_patterns(self) -> Dict:
-         if not self.config['analysis']['patterns']['enabled']:
+        if not self.config['analysis']['patterns']['enabled']:
             return {}
         """Analyze historical draws for common number patterns.
         Returns: {
