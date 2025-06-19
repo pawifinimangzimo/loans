@@ -39,7 +39,7 @@ strategy:
   resurgence_threshold: 2  # Appearances needed to exit "cold" status
 
 output:
-  sets_to_generate: 8     # Number of sets to produce
+  sets_to_generate: 5     # Number of sets to produce
   save_analysis: true      # Whether to save statistical reports
   verbose: true           # Whether to show detailed processing info
   high_low:
