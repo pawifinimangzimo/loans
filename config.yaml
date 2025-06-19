@@ -119,8 +119,8 @@ manual:  # New section
       anti_pattern: [0.1, 0.1, 0.8, 0.3]
 
 features:
-  enable_pattern_analysis: false  # Off by default
-  enable_combo_stats: false      # Off by default
+  enable_pattern_analysis: true  # Off by default
+  enable_combo_stats: true      # Off by default
 
 pattern_settings:
   consecutive_weight: 0.3
