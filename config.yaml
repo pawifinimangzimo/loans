@@ -74,7 +74,7 @@ analysis:
   combined_stats_settings:
     min_overlap_significance: 0.5
     freq_cutoff: 20  # Top 20 considered "frequent"
-  top_range: 1
+  top_range: 5
   combination_analysis:
     pairs: true
     triplets: true
