@@ -1412,8 +1412,8 @@ class LotteryAnalyzer:
     def _initialize_overdue_analysis(self):
         if not self.config['analysis']['overdue_analysis']['enabled']:
             return
-            
-        print("\nINITIALIZING GAP ANALYSIS...")
+        if self.config['output'].get('verbose', True):    
+            print("\nINITIALIZING GAP ANALYSIS...")
 
         # 1. Get all numbers that have ever appeared
         existing_nums = set()
