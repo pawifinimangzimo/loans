@@ -1874,8 +1874,8 @@ def main():
                 print(f"   Numbers: {', '.join(map(str, overdue))}")
                 # Get primes from overdue numbers
                 overdue_primes = [n for n in overdue if analyzer._is_prime(n)]
-                if overdue_primes:
-                    print(f"   Primes: {', '.join(map(str, overdue_primes))}")
+            if overdue_primes:
+                print(f"   Primes: {', '.join(map(str, overdue_primes))}")
 
 ######## HIGH LOW ###############
 
