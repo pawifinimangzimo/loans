@@ -1866,24 +1866,17 @@ def main():
             print(f"   Numbers: {', '.join(map(str, temp_stats['cold']))}")
             print(f"   Primes: {', '.join(map(str, prime_temp_stats['cold_primes'])) or 'None'}")
 
+
         # New Overdue Numbers Section
         if overdue:
             print(f"\n⏰ Overdue Numbers ({config['analysis']['overdue_analysis']['manual_threshold']}+ draws unseen):")
             print(f"   Tracking: {len(analyzer._get_overdue_numbers())} total")
             print(f"   Numbers: {', '.join(map(str, overdue))}")
             
-            # Enhanced prime detection with debugging
-            overdue_primes = []
-            for num in overdue:
-                if analyzer._is_prime(num):
-                    overdue_primes.append(num)
-                    # Temporary debug print
-                    print(f"[DEBUG] Found prime: {num}")
-            
-            if overdue_primes:
-                print(f"   Primes: {', '.join(map(str, overdue_primes))}")
-            else:
-                print("   No prime numbers in current selection")  # Helpful message
+            # Prime number display
+            overdue_primes = [n for n in overdue if analyzer._is_prime(n)]
+            print(f"   Primes: {', '.join(map(str, overdue_primes)) if overdue_primes else 'None'}")
+
 
 ######## HIGH LOW ###############
 
