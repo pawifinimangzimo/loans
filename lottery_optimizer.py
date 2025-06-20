@@ -756,7 +756,7 @@ class LotteryAnalyzer:
                 included_overdue = [n for n in numbers if n in overdue_nums]
                 overdue_display = ""
                 if overdue_nums:
-                    overdue_display = f"\n   - Overdue Coverage: {len(included_overdue)}/{len(overdue_nums)}"
+                    overdue_display = f"   - Overdue Coverage: {len(included_overdue)}/{len(overdue_nums)}"
                     if included_overdue:
                         overdue_display += f" ({', '.join(map(str, included_overdue))})"
                 
