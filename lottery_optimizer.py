@@ -1852,6 +1852,7 @@ def main():
         temp_stats = analyzer.get_temperature_stats()
         prime_temp_stats = analyzer.get_prime_temperature_stats()
         overdue = analyzer.get_overdue_numbers() 
+        total_overdue = analyzer._get_overdue_numbers()
         if not args.quiet:
             print("\n" + "="*50)
             print(" LOTTERY ANALYSIS RESULTS ".center(50, "="))
