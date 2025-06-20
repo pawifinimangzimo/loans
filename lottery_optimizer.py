@@ -824,7 +824,7 @@ class LotteryAnalyzer:
         print(" GAP ANALYSIS RESULTS ".center(50, "="))
         print(f"Analyzed last {self.config['analysis']['gap_analysis']['lookback_draws']} draws")
 
-        # 1. Frequency Table
+        # 1. Frequency Table 
         print("\nTop Gaps by Frequency:")
         for gap, count in gap_data['frequency'].items():
             freq_pct = (count / self.config['analysis']['gap_analysis']['lookback_draws']) * 100
