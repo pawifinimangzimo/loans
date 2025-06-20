@@ -195,6 +195,84 @@ class LotteryAnalyzer:
             
         return result.set_index('num')['frequency']
 ##############################
+
+##################### ANALYZE GAP ###################
+
+    def analyze_gaps(self) -> dict:
+        """
+        Calculate adjacent gaps and identify overdue gaps.
+        Returns: {
+            'frequency': {gap: count}, 
+            'overdue': [{'gap': int, 'draws_overdue': int, 'avg_frequency': float}],
+            'clusters': {'small_gap_clusters': int}
+        }
+        """
+        if not self.config['analysis']['gap_analysis']['enabled']:
+            return {}
+
+        # Load config
+        cfg = self.config['analysis']['gap_analysis']
+        lookback = cfg['lookback_draws']
+        min_gap, max_gap = cfg['min_gap_size'], cfg['max_gap_size']
+        min_freq = cfg['min_frequency']
+
+        # Load draws
+        query = f"""
+        SELECT n1, n2, n3, n4, n5, n6 
+        FROM draws 
+        ORDER BY date DESC 
+        LIMIT {lookback}
+        """
+        draws = pd.read_sql(query, self.conn)
+        sorted_draws = [sorted(row) for _, row in draws.iterrows()]
+
+        # Calculate gaps
+        gap_counts = defaultdict(int)
+        gap_last_seen = {}
+        small_gap_clusters = 0  # If track_consecutive=True
+
+        for i, draw in enumerate(sorted_draws):
+            gaps = [draw[j+1] - draw[j] for j in range(len(draw)-1)]
+            
+            # Track frequencies and last seen
+            for gap in gaps:
+                if min_gap <= gap <= max_gap:
+                    gap_counts[gap] += 1
+                    gap_last_seen[gap] = i  # Store most recent occurrence
+
+            # Track clusters of small gaps (optional)
+            if cfg['track_consecutive']:
+                if sum(1 for g in gaps if g <= 5) >= 2:  # Example threshold
+                    small_gap_clusters += 1
+
+        # Filter by min_frequency
+        gap_counts = {g: c for g, c in gap_counts.items() if c >= min_freq}
+
+        # Identify overdue gaps
+        overdue = []
+        for gap, count in gap_counts.items():
+            avg_frequency = round(lookback / count, 1)
+            draws_since_seen = len(sorted_draws) - gap_last_seen[gap] - 1
+            
+            if cfg['mode'] == 'auto':
+                is_overdue = draws_since_seen > (avg_frequency * cfg['auto_threshold'])
+            else:
+                is_overdue = draws_since_seen > cfg['manual_threshold']
+            
+            if is_overdue:
+                overdue.append({
+                    'gap': gap,
+                    'draws_overdue': draws_since_seen,
+                    'avg_frequency': avg_frequency
+                })
+
+        return {
+            'frequency': dict(sorted(gap_counts.items(), key=lambda x: -x[1])),
+            'overdue': overdue,
+            'clusters': {'small_gap_clusters': small_gap_clusters} if cfg['track_consecutive'] else {}
+        }
+
+#####################################################
 # ======================
 # COMBINATION ANALYSIS 
 # ======================
@@ -1166,9 +1244,14 @@ class LotteryAnalyzer:
         Returns:
             {
                 'frequency': pd.Series,
+                'gaps': {  # New section
+                    'frequency': dict,
+                    'overdue': list,
+                    'clusters': dict
+                },
                 'primes': {'avg_primes': float, ...},
                 'high_low': {'pct_with_low': float, ...},
-                'overdue_analysis': {  # New section
+                'overdue_analysis': {
                     'overdue': List[int], 
                     'stats': {
                         'avg_overdue': float,
@@ -1181,24 +1264,27 @@ class LotteryAnalyzer:
                     'effective_draws': {
                         'primes': int,
                         'high_low': int,
-                        'overdue_analysis': int  # New
+                        'overdue_analysis': int,
+                        'gap_analysis': int  # New
                     }
                 }
             }
         """
         results = {
             'frequency': self.get_frequencies(),
+            'gaps': self.analyze_gaps(),  # <-- Inserted here
             'primes': self.get_prime_stats(),
             'high_low': self.get_highlow_stats(),
             'metadata': {
                 'effective_draws': {
                     'primes': self._get_analysis_draw_limit('primes', 500),
-                    'high_low': self._get_analysis_draw_limit('high_low', 400)
+                    'high_low': self._get_analysis_draw_limit('high_low', 400),
+                    'gap_analysis': self._get_analysis_draw_limit('gap_analysis', 500)  # New
                 }
             }
         }
         
-        # Conditionally add gap analysis if enabled
+        # Conditionally add overdue analysis if enabled
         if self.config['analysis']['overdue_analysis']['enabled']:
             results['overdue_analysis'] = {
                 'overdue': self.get_overdue_numbers(),
@@ -1206,10 +1292,9 @@ class LotteryAnalyzer:
                 'distribution': self.get_overdue_distribution()
             }
             results['metadata']['effective_draws']['overdue_analysis'] = \
-                self._get_draw_count()  # Or specific limit if needed
+                self._get_draw_count()
         
         return results
-
 
 ############ SUMMARY ANALYSIS ######################
 

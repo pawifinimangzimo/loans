@@ -61,23 +61,29 @@ analysis:
   show_combined_stats: true
 
   gap_analysis:
-    enabled: true               # Master switch
-    mode: "auto"               # "auto" (dynamic thresholds) or "manual" (fixed)
-    
-    # Core Parameters
-    lookback_draws: 500        # Analyze last 500 draws (balance stability/relevance)
-    min_gap_size: 1            # Smallest gap to track (e.g., 1 for consecutive numbers)
-    max_gap_size: 20           # Ignore gaps >20 (adjust based on number_pool)
-    min_frequency: 5           # Ignore gaps appearing <5 times in history (noise reduction)
-    
-    # Thresholds (for validation/generation)
-    auto_threshold: 1.5        # Flag gaps unseen for 1.5x their historical avg frequency
-    manual_threshold: 10       # If mode=manual, flag gaps unseen for 10+ draws
-    weight_influence: 0.3      # How much gaps influence number generation (0=ignore, 1=strict)
-    
+    # Core Functionality
+    enabled: true               # Enable/disable gap analysis
+    mode: "auto"                # "auto" (dynamic thresholds) or "manual" (fixed)
+    analyze_adjacent_only: true # Only track gaps between consecutive numbers
+
+    # Data Scope
+    lookback_draws: 500         # Analyze last 500 draws (adjust for your lottery's volatility)
+    min_gap_size: 1             # Minimum gap to track (e.g., 1 for [3,4])
+    max_gap_size: 20            # Maximum gap to track (e.g., ignore [1,99] in 6/55 games)
+
+    # Frequency Filters
+    min_frequency: 5            # Ignore gaps appearing <5 times in history
+
+    # Thresholds
+    auto_threshold: 1.5         # Flag gaps unseen for 1.5x their historical avg
+    manual_threshold: 10        # If mode="manual", flag gaps unseen for 10+ draws
+
+    # Strategy Integration
+    weight_influence: 0.3       # How much gaps influence number generation (0=ignore, 1=strict)
+    alert_level: "warn"         # "warn" (log only) or "reject" (discard invalid sets)
+
     # Advanced
-    alert_level: "warn"        # "warn" (log only), "reject" (discard invalid sets)
-    track_consecutive: true    # Track clusters of small gaps (e.g., 3-5-7 → gaps 2, 2
+    track_consecutive: true     # Track clusters of small gaps (e.g., [3,5,7] → gaps [2,2])
 
   overdue_analysis:
     enabled: true
