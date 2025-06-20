@@ -1973,18 +1973,18 @@ def main():
                 analyzer.display_optimized_sets(valid_sets)
 
         # Save files
-        # Save files with enhanced format
-        raw_sets = analyzer.generate_sets(args.strategy)  # Get raw sets
-        optimized_sets = analyzer.generate_valid_sets()   # Get optimized sets
+            # Save files with enhanced format
+            raw_sets = analyzer.generate_sets(args.strategy)  # Get raw sets
+            optimized_sets = analyzer.generate_valid_sets()   # Get optimized sets
 
-        # Save both types with labels
-        raw_path = analyzer.save_results(raw_sets, set_type="raw")
-        opt_path = analyzer.save_results(optimized_sets, set_type="optimized")
+            # Save both types with labels
+            raw_path = analyzer.save_results(raw_sets, set_type="raw")
+            opt_path = analyzer.save_results(optimized_sets, set_type="optimized")
 
-        if not args.quiet:
-            print(f"\n💾 Results saved:")
-            print(f"   - Raw sets: {raw_path}")
-            print(f"   - Optimized sets: {opt_path}")
+            if not args.quiet:
+                print(f"\n💾 Results saved:")
+                print(f"   - Raw sets: {raw_path}")
+                print(f"   - Optimized sets: {opt_path}")
         # Generate dashboard (unless --no-dashboard)
         if not args.no_dashboard:
             dashboard = DashboardGenerator(analyzer)
