@@ -568,24 +568,32 @@ class LotteryAnalyzer:
 #===================
 # end set generator
 #===================
-    def save_results(self, sets: List[List[int]], set_type: str = "optimized") -> str:
+
+    def save_results(self, sets: Union[List[List[int]], List[Dict]], set_type: str = "optimized") -> str:
         """Save number sets to CSV with columns: numbers, sum, type, timestamp"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         path = Path(self.config['data']['results_dir']) / f"sets_{timestamp}.csv"
         
-        # Ensure directory exists
-        path.parent.mkdir(exist_ok=True)
-        
-        # Create DataFrame with specified columns
-        data = [{
-            'numbers': '-'.join(map(str, s)),
-            'sum': sum(s),
-            'type': set_type,
-            'generated_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        } for s in sets]
+        # Prepare data - handles both formats
+        data = []
+        for s in sets:
+            if isinstance(s, dict):  # Optimized set (Dict format)
+                numbers = s['numbers']
+                current_sum = s.get('sum', sum(numbers))
+            else:  # Raw set (List[int] format)
+                numbers = s
+                current_sum = sum(numbers)
+                
+            data.append({
+                'numbers': '-'.join(map(str, numbers)),
+                'sum': current_sum,
+                'type': set_type,
+                'generated_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            })
         
         pd.DataFrame(data).to_csv(path, index=False)
         return str(path)
+
 #==============================
 # Mode Handler 
 #===============================
@@ -1973,18 +1981,18 @@ def main():
                 analyzer.display_optimized_sets(valid_sets)
 
         # Save files
-            # Save files with enhanced format
-            raw_sets = analyzer.generate_sets(args.strategy)  # Get raw sets
-            optimized_sets = analyzer.generate_valid_sets()   # Get optimized sets
 
-            # Save both types with labels
-            raw_path = analyzer.save_results(raw_sets, set_type="raw")
-            opt_path = analyzer.save_results(optimized_sets, set_type="optimized")
+        # Generate and save raw sets (pre-optimization)
+        raw_sets = analyzer.generate_sets(args.strategy)  # Returns List[List[int]]
+        analyzer.save_results(raw_sets, set_type="raw")
 
-            if not args.quiet:
-                print(f"\n💾 Results saved:")
-                print(f"   - Raw sets: {raw_path}")
-                print(f"   - Optimized sets: {opt_path}")
+        # Generate and save optimized sets
+        optimized_sets = analyzer.generate_valid_sets()  # Returns List[Dict]
+        results_path = analyzer.save_results(optimized_sets, set_type="optimized")
+
+        if not args.quiet:
+            print(f"\n💾 Results saved to: {results_path}")
+
         # Generate dashboard (unless --no-dashboard)
         if not args.no_dashboard:
             dashboard = DashboardGenerator(analyzer)
