@@ -199,7 +199,7 @@ class LotteryAnalyzer:
 # COMBINATION ANALYSIS 
 # ======================
 
-    def get_combinations(self, size: int = 2, verbose: bool = True) -> pd.DataFrame:
+    def get_combinations(self, size: int = 2, verbose: bool = None ) -> pd.DataFrame:
         """Get frequency of number combinations with proper SQL ordering.
         Args:
             size: 2 for pairs, 3 for triplets, etc. (default=2)
@@ -208,6 +208,9 @@ class LotteryAnalyzer:
             DataFrame with columns [nX, nY, ..., frequency]
         """
         # ====== CONFIG VALIDATION ======
+        if verbose is None:
+            verbose = self.config['output'].get('verbose', True)
+        
         combo_type = {2: 'pairs', 3: 'triplets', 4: 'quadruplets', 
                       5: 'quintuplets', 6: 'sixtuplets'}.get(size)
         if not combo_type:
