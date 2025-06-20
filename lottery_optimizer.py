@@ -814,53 +814,7 @@ class LotteryAnalyzer:
 #######Detect Patterns Update ####### 
 ############################# Display Gap Analysis ##################
 
-    def display_gap_analysis(self, gap_data: dict) -> None:
-        """Print gap analysis results in a human-readable format."""
-        if not gap_data:
-            print("\nGap Analysis: Disabled in config")
-            return
-
-        print("\n" + "="*50)
-        print(" GAP ANALYSIS RESULTS ".center(50, "="))
-        print(f"Analyzed last {self.config['analysis']['gap_analysis']['lookback_draws']} draws")
-
-        # 1. Frequency Table 
-        print("\nTop Gaps by Frequency:")
-        for gap, count in gap_data['frequency'].items():
-            freq_pct = (count / self.config['analysis']['gap_analysis']['lookback_draws']) * 100
-            print(f" - {gap}: {count}x ({freq_pct:.1f}%)")
-
-        # 2. Overdue Gaps
-        if gap_data['overdue']:
-            print("\nOverdue Gaps:")
-            threshold = (self.config['analysis']['gap_analysis']['auto_threshold'] 
-                        if self.config['analysis']['gap_analysis']['mode'] == 'auto' 
-                        else self.config['analysis']['gap_analysis']['manual_threshold'])
-            
-            for gap in gap_data['overdue']:
-                print(f" - {gap['gap']}: {gap['draws_overdue']} draws overdue "
-                      f"(avg every {gap['avg_frequency']:.1f} draws, threshold: {threshold}x)")
-
-        # 3. Clusters (if enabled)
-        if self.config['analysis']['gap_analysis']['track_consecutive'] and gap_data['clusters']:
-            cluster_pct = (gap_data['clusters']['small_gap_clusters'] / 
-                          self.config['analysis']['gap_analysis']['lookback_draws']) * 100
-            print(f"\nClustering: {gap_data['clusters']['small_gap_clusters']} draws "
-                  f"({cluster_pct:.1f}%) have 2+ small gaps (≤5)")
-
-        # 4. Recommendations
-        print("\nRecommendations:")
-        if gap_data['frequency']:
-            top_gaps = sorted(gap_data['frequency'].items(), key=lambda x: -x[1])[:3]
-            print(f" - Prioritize sets with gaps: {', '.join(str(g[0]) for g in top_gaps}")
-        
-        if gap_data['overdue']:
-            print(f" - Consider testing gap={gap_data['overdue'][0]['gap']} (overdue)")
-        
-        if self.config['analysis']['gap_analysis']['max_gap_size'] < 30:
-            print(f" - Avoid gaps > {self.config['analysis']['gap_analysis']['max_gap_size']} "
-                  "(historically rare)")
-
+ 
 #####################################################################
  ############################ DISPLAY OPTIMIZED SET ##################
     def display_optimized_sets(self, sets: List[Dict]):
