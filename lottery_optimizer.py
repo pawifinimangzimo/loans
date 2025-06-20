@@ -724,47 +724,62 @@ class LotteryAnalyzer:
 
         print("\n=== OPTIMIZED SETS ===")
         
+        # Get overdue numbers if analysis is enabled
+        overdue_nums = []
+        if self.config['analysis']['overdue_analysis']['enabled']:
+            overdue_nums = self._get_overdue_numbers()
+        
         for i, s in enumerate(sets, 1):
             try:
                 # Safely extract numbers and sum
                 numbers = s.get('numbers', [])
                 sum_total = s.get('sum', 0)
                 
-                # Number range calculation (using config thresholds)
+                # Number range calculation
                 low_max = self.config['strategy'].get('low_number_max', 10)
-                mid_max = low_max * 2  # Or use config value
+                mid_max = low_max * 2  # Dynamic mid-range based on config
                 
                 low = sum(1 for n in numbers if n <= low_max)
                 mid = sum(1 for n in numbers if low_max < n <= mid_max)
                 high = len(numbers) - low - mid
                 
-                # Safely parse notes
+                # Parse notes
                 sum_note = next((n for n in s.get('notes', []) if 'Sum:' in n), "Sum: N/A")
                 even_odd_note = next((n for n in s.get('notes', []) if 'Even/Odd' in n), None)
+                
+                # Temperature stats
+                temp_stats = self.get_temperature_stats()
+                hot_nums = [n for n in numbers if n in temp_stats['hot']]
+                cold_nums = [n for n in numbers if n in temp_stats['cold']]
+                
+                # Overdue number analysis
+                included_overdue = [n for n in numbers if n in overdue_nums]
+                overdue_display = ""
+                if overdue_nums:
+                    overdue_display = f"\n   - Overdue Coverage: {len(included_overdue)}/{len(overdue_nums)}"
+                    if included_overdue:
+                        overdue_display += f" ({', '.join(map(str, included_overdue))})"
                 
                 # Display set information
                 print(f"{i}. {'-'.join(map(str, numbers))}")
                 
-                # Sum note (with fallback)
+                # Sum information
                 if '|' in sum_note:
                     print(f"   - Sum: {sum_total} {sum_note.split('|')[1].strip()}")
                 else:
-                    print(f"   - Sum: {sum_total} (Optimal range)")
+                    print(f"   - Sum: {sum_total} (Optimal range: {sum_note.split(':')[1].strip() if ':' in sum_note else 'N/A'})")
                 
-                # Even/Odd note if available
+                # Pattern notes
                 if even_odd_note:
                     print(f"   - {even_odd_note}")
                 
-                # Number stats
-                hot_nums = [n for n in numbers if n in self.get_temperature_stats()['hot']]
-                cold_nums = [n for n in numbers if n in self.get_temperature_stats()['cold']]
-                overdue_nums = self._get_overdue_numbers() if hasattr(self, '_get_overdue_numbers') else []
-                
+                # Number characteristics
                 print(f"   - Hot Numbers: {len(hot_nums)} ({', '.join(map(str, hot_nums)) if hot_nums else 'None'})")
                 print(f"   - Cold Numbers: {len(cold_nums)} ({', '.join(map(str, cold_nums)) if cold_nums else 'None'})")
                 
+                # Overdue information (if enabled)
                 if overdue_nums:
-                    print(f"   - Overdue Numbers: {len(overdue_nums)} ({', '.join(map(str, overdue_nums))})")
+                    print(overdue_display)
                 
                 print(f"   - Number Range: {low} Low, {mid} Mid, {high} High\n")
                 
