@@ -1852,7 +1852,6 @@ def main():
         temp_stats = analyzer.get_temperature_stats()
         prime_temp_stats = analyzer.get_prime_temperature_stats()
         overdue = analyzer.get_overdue_numbers() 
-        total_overdue = analyzer._get_overdue_numbers()
         if not args.quiet:
             print("\n" + "="*50)
             print(" LOTTERY ANALYSIS RESULTS ".center(50, "="))
@@ -1870,13 +1869,21 @@ def main():
         # New Overdue Numbers Section
         if overdue:
             print(f"\n⏰ Overdue Numbers ({config['analysis']['overdue_analysis']['manual_threshold']}+ draws unseen):")
-            print(f"   Tracking: {len(analyzer._get_overdue_numbers())} total")  # Fixed variable name
+            print(f"   Tracking: {len(analyzer._get_overdue_numbers())} total")
             print(f"   Numbers: {', '.join(map(str, overdue))}")
             
-            # Get primes from overdue numbers - NOW PROPERLY INDENTED
-            overdue_primes = [n for n in overdue if analyzer._is_prime(n)]
+            # Enhanced prime detection with debugging
+            overdue_primes = []
+            for num in overdue:
+                if analyzer._is_prime(num):
+                    overdue_primes.append(num)
+                    # Temporary debug print
+                    print(f"[DEBUG] Found prime: {num}")
+            
             if overdue_primes:
                 print(f"   Primes: {', '.join(map(str, overdue_primes))}")
+            else:
+                print("   No prime numbers in current selection")  # Helpful message
 
 ######## HIGH LOW ###############
 
