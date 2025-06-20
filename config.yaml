@@ -86,6 +86,7 @@ analysis:
     draws: 1000 
     min_display: 3
   primes:
+    enabled: true 
     draws: 500
     hot_threshold: 5    
   high_low:
