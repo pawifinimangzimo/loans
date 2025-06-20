@@ -344,10 +344,11 @@ class LotteryAnalyzer:
             "SELECT MAX(current_overdue) FROM number_overdues"
         ).fetchone()[0]
         
-        print(f"\nOVERDUE ANALYSIS VERIFICATION:")
-        print(f"Total numbers tracked: {total_numbers}/{self.config['strategy']['number_pool']}")
-        print(f"Max current gap: {max_overdue}")
-        print(f"Thresholds: Auto={self.config['analysis']['overdue_analysis']['auto_threshold']}x avg, Manual={self.config['analysis']['overdue_analysis']['manual_threshold']} draws")
+        if self.config['output']['verbose']['True']:
+            print(f"\nOVERDUE ANALYSIS VERIFICATION:")
+            print(f"Total numbers tracked: {total_numbers}/{self.config['strategy']['number_pool']}")
+            print(f"Max current gap: {max_overdue}")
+            print(f"Thresholds: Auto={self.config['analysis']['overdue_analysis']['auto_threshold']}x avg, Manual={self.config['analysis']['overdue_analysis']['manual_threshold']} draws")
 
 
     def debug_overdue_status(self):
