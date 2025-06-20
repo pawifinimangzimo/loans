@@ -1869,7 +1869,7 @@ def main():
         # New Overdue Numbers Section
             if overdue:
                 print(f"\n⏰ Overdue Numbers ({config['analysis']['overdue_analysis']['manual_threshold']}+ draws unseen):")
-                print(f"   Tracking: {len(overdue)} total")
+                print(f"   Tracking: {len(total_overdue)} total")
                 print(f"   Numbers: {', '.join(map(str, overdue))}")
                 # Get primes from overdue numbers
                 overdue_primes = [n for n in overdue if analyzer._is_prime(n)]
