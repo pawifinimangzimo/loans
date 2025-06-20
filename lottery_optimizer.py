@@ -735,6 +735,7 @@ class LotteryAnalyzer:
         }
 #######Detect Patterns Update ####### 
 
+ ############################ DISPLAY OPTIMIZED SET ##################
     def display_optimized_sets(self, sets: List[Dict]):
         """Safe display of optimized sets with proper error handling"""
         if not sets:
@@ -754,13 +755,19 @@ class LotteryAnalyzer:
                 numbers = s.get('numbers', [])
                 sum_total = s.get('sum', 0)
                 
-                # Number range calculation
+                # Number range calculation - now storing the actual numbers
                 low_max = self.config['strategy'].get('low_number_max', 10)
                 mid_max = low_max * 2  # Dynamic mid-range based on config
                 
-                low = sum(1 for n in numbers if n <= low_max)
-                mid = sum(1 for n in numbers if low_max < n <= mid_max)
-                high = len(numbers) - low - mid
+                # Get numbers in each range
+                low_nums = [n for n in numbers if n <= low_max]
+                mid_nums = [n for n in numbers if low_max < n <= mid_max]
+                high_nums = [n for n in numbers if n > mid_max]
+                
+                # Count numbers in each range
+                low = len(low_nums)
+                mid = len(mid_nums)
+                high = len(high_nums)
                 
                 # Parse notes
                 sum_note = next((n for n in s.get('notes', []) if 'Sum:' in n), "Sum: N/A")
@@ -800,11 +807,15 @@ class LotteryAnalyzer:
                 if overdue_nums:
                     print(overdue_display)
                 
-                print(f"   - Number Range: {low} Low, {mid} Mid, {high} High\n")
+                # Updated number range display with specific numbers
+                print(f"   - Number Range: {low} Low ({', '.join(map(str, low_nums)) if low_nums else 'None'}), "
+                      f"{mid} Mid ({', '.join(map(str, mid_nums)) if mid_nums else 'None'}), "
+                      f"{high} High ({', '.join(map(str, high_nums)) if high_nums else 'None'})\n")
                 
             except Exception as e:
                 print(f"   - Error displaying set {i}: {str(e)}")
                 continue
+ #####################################################################
 
 
     def display_pattern_analysis(self, patterns: Dict):
