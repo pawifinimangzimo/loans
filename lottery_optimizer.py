@@ -1981,18 +1981,40 @@ def main():
                 analyzer.display_optimized_sets(valid_sets)
 
         # Save files
-
+######################### FILE SAVING ###########################################
         # Generate and save raw sets (pre-optimization)
-        raw_sets = analyzer.generate_sets(args.strategy)  # Returns List[List[int]]
-        analyzer.save_results(raw_sets, set_type="raw")
+# In your main() function, replace the saving section with:
 
-        # Generate and save optimized sets
-        optimized_sets = analyzer.generate_valid_sets()  # Returns List[Dict]
-        results_path = analyzer.save_results(optimized_sets, set_type="optimized")
+            # Generate both sets
+            raw_sets = analyzer.generate_sets(args.strategy)  # List[List[int]]
+            optimized_sets = analyzer.generate_valid_sets()   # List[Dict]
 
-        if not args.quiet:
-            print(f"\n💾 Results saved to: {results_path}")
+            # Combine into one DataFrame
+            all_sets = []
+            for s in raw_sets:
+                all_sets.append({
+                    'numbers': '-'.join(map(str, s)),
+                    'sum': sum(s),
+                    'type': 'raw',
+                    'generated_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                })
 
+            for s in optimized_sets:
+                all_sets.append({
+                    'numbers': '-'.join(map(str, s['numbers'])),
+                    'sum': s.get('sum', sum(s['numbers'])),
+                    'type': 'optimized', 
+                    'generated_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                })
+
+            # Save combined results
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            path = Path(analyzer.config['data']['results_dir']) / f"sets_{timestamp}.csv"
+            pd.DataFrame(all_sets).to_csv(path, index=False)
+
+            if not args.quiet:
+                print(f"\n💾 Saved {len(raw_sets)} raw + {len(optimized_sets)} optimized sets to: {path}")
+##################################################################################
         # Generate dashboard (unless --no-dashboard)
         if not args.no_dashboard:
             dashboard = DashboardGenerator(analyzer)
