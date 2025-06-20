@@ -2043,8 +2043,6 @@ def main():
 
 ########################## GAP ANALYSIS #####################
 
-            gap_results = analyzer.analyze_gaps()
-            analyzer.display_gap_analysis(gap_results)
 
 #############################################################
 
