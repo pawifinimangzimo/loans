@@ -1497,7 +1497,7 @@ class LotteryAnalyzer:
                 "summary": {
                     "average_frequency": float(combos['frequency'].mean()),
                     "std_deviation": float(combos['frequency'].std()),
-                    "coverage_pct": (len(combos) / total_possible * 100,
+                    "coverage_pct": (len(combos) / total_possible) * 100,
                     "total_possible": total_possible,
                     "observed": len(combos)
                 },
