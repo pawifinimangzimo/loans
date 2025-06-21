@@ -169,7 +169,40 @@ class LotteryAnalyzer:
         except Exception as e:
             raise ValueError(f"Data loading failed: {str(e)}")
 ####################
+######### Number Trends ###############
 
+    def get_number_trend(self, num: int, lookback=10) -> dict:
+        """Structured number trend analysis"""
+        query = """
+        WITH appearances AS (
+            SELECT date, ROW_NUMBER() OVER (ORDER BY date DESC) as rn 
+            FROM draws
+            WHERE ? IN (n1,n2,n3,n4,n5,n6)
+            ORDER BY date DESC
+            LIMIT ?
+        )
+        SELECT date, rn FROM appearances ORDER BY date
+        """
+        results = self.conn.execute(query, (num, lookback)).fetchall()
+        
+        appearance_flags = [0] * lookback
+        for date, rn in results:
+            appearance_flags[rn-1] = 1  # Convert to 0-based index
+            
+        gaps = [results[i][1] - results[i+1][1] - 1 
+                for i in range(len(results)-1)] if len(results) > 1 else [lookback]
+        
+        return {
+            "analysis": "number_trend",
+            "number": num,
+            "last_n_appearances": appearance_flags,
+            "current_gap": results[0][1]-1 if results else lookback,
+            "average_gap": sum(gaps)/len(gaps) if gaps else float(lookback),
+            "last_seen": results[0][0] if results else None,
+            "appearance_count": len(results)
+        }
+
+#######################################
     def get_weights(self) -> dict:  
         """Export ALL weights, including new ones."""  
         return {  
@@ -358,43 +391,49 @@ class LotteryAnalyzer:
 
 #=======================
 
-    def get_temperature_stats(self) -> Dict[str, List[int]]:
-        """Classify numbers by recency in draw counts only."""
+    def get_temperature_stats(self) -> Dict:
+        """Enhanced temperature stats with structured output"""
+        # Existing hot/cold calculation
         hot_limit = self.config['analysis']['recency_bins']['hot']
         cold_limit = self.config['analysis']['recency_bins']['cold']
-
-        hot_query = f"""
-            WITH recent_draws AS (
-                SELECT ROWID FROM draws 
-                ORDER BY date DESC 
-                LIMIT {hot_limit}
-            )
-            SELECT DISTINCT n1 as num FROM draws
-            WHERE ROWID IN (SELECT ROWID FROM recent_draws)
-            UNION SELECT n2 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
-            UNION SELECT n3 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
-            UNION SELECT n4 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
-            UNION SELECT n5 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
-            UNION SELECT n6 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
-        """
         
-        cold_query = f"""
-            WITH active_draws AS (
-                SELECT ROWID FROM draws
-                ORDER BY date DESC
-                LIMIT {cold_limit}
-            )
-            SELECT DISTINCT n1 as num FROM draws
-            WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
-            EXCEPT SELECT n1 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
-            -- Repeat for n2-n6...
-        """
-
         hot = pd.read_sql(hot_query, self.conn)['num'].unique().tolist()
         cold = pd.read_sql(cold_query, self.conn)['num'].unique().tolist()
         
-        return {'hot': hot[:self.config['analysis']['top_range']], 
-                'cold': cold[:self.config['analysis']['top_range']]}
+        # Additional prime classification
+        primes = set(self._get_prime_numbers())
+        hot_primes = [n for n in hot if n in primes]
+        cold_primes = [n for n in cold if n in primes]
+        
+        # Apply top_range limit
+        top_n = self.config['analysis']['top_range']
+        hot = hot[:top_n]
+        cold = cold[:top_n]
+        hot_primes = hot_primes[:top_n]
+        cold_primes = cold_primes[:top_n]
+        
+        return {
+            # Structured format
+            "analysis": "temperature_stats",
+            "metadata": {
+                "hot_threshold": hot_limit,
+                "cold_threshold": cold_limit,
+                "top_range": top_n
+            },
+            "numbers": {
+                "hot": [int(n) for n in hot],
+                "cold": [int(n) for n in cold]
+            },
+            "primes": {
+                "hot_primes": [int(n) for n in hot_primes],
+                "cold_primes": [int(n) for n in cold_primes]
+            },
+            # Backward compatible format
+            "legacy_format": {
+                'hot': hot,
+                'cold': cold
+            }
+        }
 
     def _get_draw_count(self) -> int:
         """Get total number of draws in database."""
@@ -994,37 +1033,55 @@ class LotteryAnalyzer:
 #End mode handler
 #=============================
 
-    def get_prime_stats(self) -> dict:
-        """Enhanced prime analysis with safeguards"""
+    def get_prime_stats(self) -> Dict:
+        """Enhanced prime stats with structured output"""
         try:
             draw_limit = max(1, self._get_analysis_draw_limit('primes', 500))
             hot_threshold = self.config['analysis']['primes'].get('hot_threshold', 5)
             
-            query = f"""
-                WITH recent_draws AS (
-                    SELECT * FROM draws ORDER BY date DESC LIMIT {draw_limit}
-                ),
-                prime_counts AS (
-                    SELECT date, 
-                           SUM(CASE WHEN n1 IN ({','.join(map(str, self.prime_numbers))}) THEN 1 ELSE 0 END) +
-                           SUM(CASE WHEN n2 IN ({','.join(map(str, self.prime_numbers))}) THEN 1 ELSE 0 END) +
-                           ... AS prime_count
-                    FROM recent_draws
-                    GROUP BY date
-                )
-                SELECT 
-                    AVG(prime_count) as avg_primes_per_draw,
-                    SUM(CASE WHEN prime_count >= 2 THEN 1 ELSE 0 END) * 100.0 / COUNT(*) as pct_two_plus_primes
-                FROM prime_counts
-            """
+            # Existing query execution
             result = self.conn.execute(query).fetchone()
+            
+            # Get additional prime data
+            prime_nums = self._get_prime_numbers()
+            temp_stats = self.get_temperature_stats()
+            
             return {
-                'avg_primes': round(result[0], 2),
-                'pct_two_plus': round(result[1], 1)
+                # Standard structured format
+                "analysis": "prime_stats",
+                "metadata": {
+                    "draws_analyzed": draw_limit,
+                    "hot_threshold": hot_threshold,
+                    "total_primes": len(prime_nums)
+                },
+                "stats": {
+                    "avg_primes_per_draw": round(result[0], 2),
+                    "pct_two_plus_primes": round(result[1], 1),
+                    "hot_primes": [n for n in temp_stats['numbers']['hot'] 
+                                  if n in prime_nums],
+                    "cold_primes": [n for n in temp_stats['numbers']['cold'] 
+                                   if n in prime_nums]
+                },
+                "all_primes": sorted(prime_nums),
+                
+                # Backward compatible format
+                "legacy_format": {
+                    'avg_primes': round(result[0], 2),
+                    'pct_two_plus': round(result[1], 1),
+                    'error': None
+                }
             }
+
         except sqlite3.Error as e:
-            logging.error(f"Prime stats failed: {str(e)}")
-            return {'error': 'Prime analysis unavailable'}
+            error_msg = f"Prime stats failed: {str(e)}"
+            logging.error(error_msg)
+            return {
+                "analysis": "prime_stats",
+                "error": error_msg,
+                "legacy_format": {
+                    'error': 'Prime analysis unavailable'
+                }
+            }
 
     def _is_prime(self, n: int) -> bool:
         """Helper method to check if a number is prime"""
@@ -1401,50 +1458,78 @@ class LotteryAnalyzer:
             return {'error': 'Range analysis failed'}
 
 ########################
+
     def get_combination_stats(self, size: int) -> Dict:
-        """Get statistics for number combinations of given size.
-        Returns: {
-            'average_frequency': float,
-            'most_common': {'numbers': list, 'count': int},
-            'std_deviation': float,
-            'coverage_pct': float,
-            'top_co_occurring': list(tuple)
-        }
-        """
+        """Enhanced version with structured output and existing features"""
         if not self.config.get('features', {}).get('enable_combo_stats', False):
-            return {}
+            return {
+                "analysis": "combination_stats",
+                "status": "disabled_in_config",
+                "size": size
+            }
 
         try:
             combos = self.get_combinations(size, verbose=False)
             if combos.empty:
-                return {}
+                return {
+                    "analysis": "combination_stats",
+                    "status": "no_data",
+                    "size": size
+                }
 
-            # Calculate co-occurrence first (existing code)
+            # Core calculations (preserving your existing logic)
+            total_possible = len(list(combinations(self.number_pool, size)))
             co_occurrence = defaultdict(int)
+            
             for _, row in combos.iterrows():
                 for i in range(1, size+1):
                     num = row[f'n{i}']
                     co_occurrence[num] += 1
 
-            # Get the most common combination (modified section)
             most_common_row = combos.iloc[0]
             most_common_numbers = [most_common_row[f'n{i}'] for i in range(1, size+1)]
 
-            # New return format (replace the existing stats dictionary)
+            # Build enhanced output structure
             return {
-                'average_frequency': combos['frequency'].mean(),
-                'most_common': {
-                    'numbers': most_common_numbers,
-                    'count': most_common_row['frequency']
+                "analysis": "combination_stats",
+                "size": size,
+                "status": "success",
+                "summary": {
+                    "average_frequency": float(combos['frequency'].mean()),
+                    "std_deviation": float(combos['frequency'].std()),
+                    "coverage_pct": (len(combos) / total_possible * 100,
+                    "total_possible": total_possible,
+                    "observed": len(combos)
                 },
-                'std_deviation': combos['frequency'].std(),
-                'coverage_pct': (len(combos) / len(list(combinations(self.number_pool, size)))) * 100,
-                'top_co_occurring': sorted(co_occurrence.items(), key=lambda x: x[1], reverse=True)[:5]
+                "most_common": {
+                    "numbers": most_common_numbers,
+                    "count": int(most_common_row['frequency']),
+                    "pct_of_draws": (most_common_row['frequency']/self._get_draw_count())*100
+                },
+                "co_occurrence": [
+                    {"number": num, "count": count}
+                    for num, count in sorted(co_occurrence.items(), 
+                                           key=lambda x: x[1], 
+                                           reverse=True)[:5]
+                ],
+                "top_combinations": [
+                    {
+                        "numbers": [row[f'n{i}'] for i in range(1, size+1)],
+                        "count": row['frequency'],
+                        "pct_of_draws": (row['frequency']/self._get_draw_count())*100
+                    }
+                    for _, row in combos.head(5).iterrows()
+                ]
             }
 
         except Exception as e:
             logging.warning(f"Combination stats failed for size {size}: {str(e)}")
-            return {}
+            return {
+                "analysis": "combination_stats",
+                "status": "error",
+                "error": str(e),
+                "size": size
+            }
 
 ############################# New Added Section ###########################
 
@@ -1930,6 +2015,47 @@ class LotteryAnalyzer:
 
 ###########################################################################
 ########################
+
+#### ANALYSIS OUTPUT ###########
+
+class AnalysisOutput:
+    @staticmethod
+    def to_json(analyzer, numbers_to_analyze=None):
+        """Main structured output generator"""
+        if numbers_to_analyze is None:
+            numbers_to_analyze = analyzer.get_frequencies().index.tolist()[:5]
+        
+        return {
+            "metadata": {
+                "generated_at": datetime.now().isoformat(),
+                "number_pool": analyzer.config['strategy']['number_pool'],
+                "draw_count": analyzer._get_draw_count()
+            },
+            "analyses": [
+                analyzer.get_temperature_stats(),
+                analyzer.get_prime_stats(),
+                *[analyzer.get_number_trend(n) for n in numbers_to_analyze],
+                analyzer.get_combination_stats(2),
+                analyzer.get_combination_stats(3),
+                analyzer.get_overdue_trends()  # You'll need to implement this similarly
+            ]
+        }
+
+    @staticmethod
+    def to_cli(analyzer):
+        """Simplified CLI output"""
+        data = AnalysisOutput.to_json(analyzer)
+        print(f"Analysis complete for {data['metadata']['draw_count']} draws")
+        print(f"Number pool: 1-{data['metadata']['number_pool']}")
+        
+        for analysis in data['analyses']:
+            print(f"\n{analysis['analysis'].upper().replace('_', ' ')}:")
+            if analysis['analysis'] == 'number_trend':
+                print(f"Number {analysis['number']}: "
+                      f"{analysis['appearance_count']} appearances, "
+                      f"current gap {analysis['current_gap']} draws")
+
+################################
 
 # ======================
 # DASHBOARD GENERATOR
