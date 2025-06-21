@@ -638,6 +638,7 @@ class LotteryAnalyzer:
 
 ########### Generate Candidate ##############
 
+
     def _generate_candidate(self, strategy: str = None) -> List[int]:
         """Generate candidate numbers with time-based weighting integration.
         
@@ -645,7 +646,7 @@ class LotteryAnalyzer:
             strategy: Generation strategy ('balanced', 'frequent', or None for random)
             
         Returns:
-            List of selected numbers
+            List of selected numbers (guaranteed native Python ints)
         """
         # Get base weights that already include time-based factors
         weights = self.weights.copy()
@@ -661,8 +662,8 @@ class LotteryAnalyzer:
         
         if strategy == 'balanced':
             # Get hot and cold numbers (already time-weighted in base weights)
-            hot = self.get_temperature_stats()['hot'][:3]
-            cold = self.get_temperature_stats()['cold'][:2]
+            hot = [int(n) for n in self.get_temperature_stats()['hot'][:3]]  # Convert to int
+            cold = [int(n) for n in self.get_temperature_stats()['cold'][:2]]  # Convert to int
             remaining = self.config['strategy']['numbers_to_select'] - len(hot) - len(cold)
             
             # Filter pool and adjust weights for remaining numbers
@@ -681,21 +682,21 @@ class LotteryAnalyzer:
                 replace=False,
                 p=pool_weights  # Use time-adjusted weights
             )
-            return sorted(hot + cold + random_nums.tolist())
+            return sorted(hot + cold + [int(n) for n in random_nums.tolist()])  # Convert all to int
             
         elif strategy == 'frequent':
-            # Use weighted frequencies
-            return weights.nlargest(
+            # Use weighted frequencies and convert to native ints
+            return [int(n) for n in weights.nlargest(
                 self.config['strategy']['numbers_to_select']
-            ).index.tolist()
+            ).index.tolist()]
             
         else:  # Fallback strategy with time weighting
-            return sorted(np.random.choice(
+            return sorted([int(n) for n in np.random.choice(
                 self.number_pool,
                 size=self.config['strategy']['numbers_to_select'],
                 replace=False,
                 p=weights  # Use time-adjusted weights
-            ))
+            )])
 
 #############################################
 
