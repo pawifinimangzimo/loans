@@ -428,7 +428,12 @@ class LotteryAnalyzer:
         return self.conn.execute(query, (low_max, low_max)).fetchone()[0]
 # Helpers         
 
-
+    def _get_time_weights(self, window: int) -> dict:
+        """Get time weights for a specific lookback window."""
+        recent_draws = self._get_draws_in_window(window)
+        counts = recent_draws[[f'n{i}' for i in range(1, 7)]].stack().value_counts()
+        return (counts / counts.sum()).to_dict()
+        
     def _verify_overdue_analysis(self):
         """Verify overdue analysis data exists"""
         # Check if any gaps recorded at all
@@ -631,28 +636,69 @@ class LotteryAnalyzer:
             return hot + cold + random_nums.tolist()
         # ... other strategies ...
 
+########### Generate Candidate ##############
+
     def _generate_candidate(self, strategy: str = None) -> List[int]:
-        """Consolidated candidate generator (replace any variants)"""
+        """Generate candidate numbers with time-based weighting integration.
+        
+        Args:
+            strategy: Generation strategy ('balanced', 'frequent', or None for random)
+            
+        Returns:
+            List of selected numbers
+        """
+        # Get base weights that already include time-based factors
+        weights = self.weights.copy()
+        
+        # Apply strategy-specific time boosts if prediction is enabled
+        if (strategy == 'aggressive' and 
+            self.config.get('prediction', {}).get('enabled', False)):
+            recent_window = self.config['prediction'].get('recent_time_window', 7)
+            recent_weights = pd.Series(self.get_time_weights(window=recent_window))
+            recent_ratio = self.config['prediction'].get('recent_time_ratio', 0.1)
+            weights = weights * (1 - recent_ratio) + recent_weights * recent_ratio
+            weights = weights / weights.sum()  # Renormalize
+        
         if strategy == 'balanced':
+            # Get hot and cold numbers (already time-weighted in base weights)
             hot = self.get_temperature_stats()['hot'][:3]
             cold = self.get_temperature_stats()['cold'][:2]
             remaining = self.config['strategy']['numbers_to_select'] - len(hot) - len(cold)
+            
+            # Filter pool and adjust weights for remaining numbers
+            pool = [n for n in self.number_pool if n not in hot + cold]
+            pool_weights = weights[pool]
+            
+            # Normalize weights for the remaining pool
+            if pool_weights.sum() > 0:
+                pool_weights = pool_weights / pool_weights.sum()
+            else:  # Fallback if all weights are zero
+                pool_weights = None
+                
             random_nums = np.random.choice(
-                [n for n in self.number_pool if n not in hot + cold],
+                pool,
                 size=remaining,
-                replace=False
+                replace=False,
+                p=pool_weights  # Use time-adjusted weights
             )
-            return hot + cold + random_nums.tolist()
+            return sorted(hot + cold + random_nums.tolist())
+            
         elif strategy == 'frequent':
-            top_n = self.config['strategy']['numbers_to_select']
-            freqs = self.get_frequencies()
-            return freqs.head(top_n).index.tolist()
-        else:  # Fallback strategy
+            # Use weighted frequencies
+            return weights.nlargest(
+                self.config['strategy']['numbers_to_select']
+            ).index.tolist()
+            
+        else:  # Fallback strategy with time weighting
             return sorted(np.random.choice(
                 self.number_pool,
                 size=self.config['strategy']['numbers_to_select'],
-                replace=False
+                replace=False,
+                p=weights  # Use time-adjusted weights
             ))
+
+#############################################
+
 
     def _generate_fallback_set(self) -> List[int]:
         """Fallback if sum validation fails too often."""
@@ -825,28 +871,53 @@ class LotteryAnalyzer:
         else:
             self._init_weights()  # Pure fallback
         
+
     def _init_weights(self):
-        """Original function now acts as a fallback shell"""
+        """Initialize weights with time awareness while preserving hybrid analysis."""
+        # Preserve hybrid analysis check
         if self.config['analysis']['overdue_analysis']['enabled']:
-            self._init_weights_hybrid()  # Try hybrid first
-        else:
-            # Original logic (unchanged)
-            if self.mode == 'auto':
-                self.weights = pd.Series(1.0, index=self.number_pool)
-                self.learning_rate = self.config.get('auto', {}).get('learning_rate', 0.01)
-                self.decay_factor = self.config.get('auto', {}).get('decay_factor', 0.97)
-            else:
-                weights_config = self.config.get('manual', {}).get('strategy', {}).get('weighting', {})
-                self.weights = pd.Series(
-                    weights_config.get('frequency', 0.4) * self._get_frequency_weights() +
-                    weights_config.get('recency', 0.3) * self._get_recent_weights() +
-                    weights_config.get('randomness', 0.3) * np.random.rand(len(self.number_pool))
-                )
-                # Apply cold number bonus
-                cold_bonus = weights_config.get('resurgence', 0.1)
-                cold_nums = self.get_temperature_stats()['cold']
-                self.weights[cold_nums] *= (1 + cold_bonus)
-                self.weights /= self.weights.sum()
+            self._init_weights_hybrid()  # Keep your existing hybrid logic
+            return
+
+        # Core weight initialization (modified to include time awareness)
+        if self.mode == 'auto':
+            # Start with uniform weights
+            base_weights = pd.Series(1.0, index=self.number_pool)
+            
+            # Add time awareness if enabled
+            if self.config.get('prediction', {}).get('enabled', False):
+                time_window = self.config['prediction'].get('global_time_window', 30)
+                time_weights = pd.Series(self._get_time_weights(window=time_window)).fillna(0)
+                global_ratio = self.config['prediction'].get('global_time_ratio', 0.15)
+                base_weights = base_weights * (1 - global_ratio) + time_weights * global_ratio
+            
+            self.weights = base_weights / base_weights.sum()
+            self.learning_rate = self.config.get('auto', {}).get('learning_rate', 0.01)
+            self.decay_factor = self.config.get('auto', {}).get('decay_factor', 0.97)
+            
+        else:  # Manual mode
+            weights_config = self.config.get('manual', {}).get('strategy', {}).get('weighting', {})
+            
+            # Base weights with time awareness
+            base_weights = (
+                weights_config.get('frequency', 0.4) * self._get_frequency_weights() +
+                weights_config.get('recency', 0.3) * self._get_recent_weights() +
+                weights_config.get('randomness', 0.3) * np.random.rand(len(self.number_pool))
+            )
+            
+            # Add time awareness if enabled
+            if self.config.get('prediction', {}).get('enabled', False):
+                time_window = self.config['prediction'].get('global_time_window', 30)
+                time_weights = pd.Series(self._get_time_weights(window=time_window)).fillna(0)
+                global_ratio = self.config['prediction'].get('global_time_ratio', 0.15)
+                base_weights = base_weights * (1 - global_ratio) + time_weights * global_ratio
+            
+            # Apply cold number bonus (preserve existing logic)
+            cold_bonus = weights_config.get('resurgence', 0.1)
+            cold_nums = self.get_temperature_stats()['cold']
+            base_weights[cold_nums] *= (1 + cold_bonus)
+            
+            self.weights = base_weights / base_weights.sum()
 
     
     def _init_weights_hybrid(self):

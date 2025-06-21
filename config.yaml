@@ -178,5 +178,10 @@ pattern_settings:
   prime_weight: 0.1
   
 prediction:
+  enabled: true
   rolling_window: 30      # Analyze last 30 draws/days
   cooccurrence_depth: 3   # Track top 3 pairs per number
+  global_time_window: 30  # Days/draws for base weights
+  global_time_ratio: 0.15 # 15% influence in _init_weights()
+  recent_time_window: 7   # Days/draws for aggressive strategy
+  recent_time_ratio: 0.1  # Extra 10% boost for aggressive
