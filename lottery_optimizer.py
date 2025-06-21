@@ -842,38 +842,30 @@ class LotteryAnalyzer:
             return pd.read_sql("SELECT * FROM draws WHERE date >= ?", self.conn, params=(cutoff,))
 
     def get_time_weights(self, window: int = None) -> dict:
-        """Enhanced time-based weights with proper type handling"""
+        """Final robust version with type fixing and better distribution"""
         window = window or self.config['prediction'].get('rolling_window', 30)
         
         try:
+            # Get draws and convert to native types immediately
             recent_draws = self._get_draws_in_window(window)
-            counts = recent_draws[[f'n{i}' for i in range(1, 7)]].stack().value_counts()
+            numbers = recent_draws[[f'n{i}' for i in range(1, 7)]].stack()
             
-            # Create weights with native Python types from the start
-            weights = {int(num): float(count) for num, count in counts.items()}
+            # Count using native Python types
+            counts = collections.defaultdict(int)
+            for num in numbers:
+                counts[int(num)] += 1
             
-            # Initialize all numbers with minimum weight (0.1)
-            full_weights = {num: 0.1 for num in self.number_pool}
+            # Create weights with minimum base value
+            weights = {num: max(counts.get(num, 0.1), 0.1) for num in self.number_pool}
             
-            # Update with actual counts while preserving types
-            full_weights.update(weights)
-            
-            # Convert to Series for pandas operations
-            weights_series = pd.Series(full_weights)
-            
-            # Normalize with smoothing
-            total = weights_series.sum()
-            normalized = (weights_series / total).clip(lower=0.01)
-            normalized /= normalized.sum()  # Final normalization
-            
-            # Return with guaranteed native Python types
-            return {int(k): float(v) for k, v in normalized.items()}
+            # Normalize
+            total = sum(weights.values())
+            return {num: weight/total for num, weight in weights.items()}
             
         except Exception as e:
             logging.warning(f"Time weights fallback: {str(e)}")
             uniform = 1.0 / len(self.number_pool)
-            return {int(num): float(uniform) for num in self.number_pool}
-
+            return {num: uniform for num in self.number_pool}
 
     def get_cooccurrence_weights(self) -> dict:
         """Calculate how often numbers appear together (for all pairs)."""
