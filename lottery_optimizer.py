@@ -169,40 +169,7 @@ class LotteryAnalyzer:
         except Exception as e:
             raise ValueError(f"Data loading failed: {str(e)}")
 ####################
-######### Number Trends ###############
 
-    def get_number_trend(self, num: int, lookback=10) -> dict:
-        """Structured number trend analysis"""
-        query = """
-        WITH appearances AS (
-            SELECT date, ROW_NUMBER() OVER (ORDER BY date DESC) as rn 
-            FROM draws
-            WHERE ? IN (n1,n2,n3,n4,n5,n6)
-            ORDER BY date DESC
-            LIMIT ?
-        )
-        SELECT date, rn FROM appearances ORDER BY date
-        """
-        results = self.conn.execute(query, (num, lookback)).fetchall()
-        
-        appearance_flags = [0] * lookback
-        for date, rn in results:
-            appearance_flags[rn-1] = 1  # Convert to 0-based index
-            
-        gaps = [results[i][1] - results[i+1][1] - 1 
-                for i in range(len(results)-1)] if len(results) > 1 else [lookback]
-        
-        return {
-            "analysis": "number_trend",
-            "number": num,
-            "last_n_appearances": appearance_flags,
-            "current_gap": results[0][1]-1 if results else lookback,
-            "average_gap": sum(gaps)/len(gaps) if gaps else float(lookback),
-            "last_seen": results[0][0] if results else None,
-            "appearance_count": len(results)
-        }
-
-#######################################
     def get_weights(self) -> dict:  
         """Export ALL weights, including new ones."""  
         return {  
@@ -391,27 +358,43 @@ class LotteryAnalyzer:
 
 #=======================
 
-#######################
+    def get_temperature_stats(self) -> Dict[str, List[int]]:
+        """Classify numbers by recency in draw counts only."""
+        hot_limit = self.config['analysis']['recency_bins']['hot']
+        cold_limit = self.config['analysis']['recency_bins']['cold']
 
-    def get_temperature_stats(self) -> Dict:
-        """Public method that maintains the original interface"""
-        stats = self._get_temperature_stats_no_init()
-        return {
-            "analysis": "temperature_stats",
-            "metadata": {
-                "hot_threshold": self.config['analysis']['recency_bins']['hot'],
-                "cold_threshold": self.config['analysis']['recency_bins']['cold'],
-                "top_range": self.config['analysis']['top_range']
-            },
-            "numbers": stats["numbers"],
-            "primes": stats["primes"],
-            "legacy_format": {
-                'hot': stats["numbers"]["hot"],
-                'cold': stats["numbers"]["cold"]
-            }
-        }
- 
-#######################
+        hot_query = f"""
+            WITH recent_draws AS (
+                SELECT ROWID FROM draws 
+                ORDER BY date DESC 
+                LIMIT {hot_limit}
+            )
+            SELECT DISTINCT n1 as num FROM draws
+            WHERE ROWID IN (SELECT ROWID FROM recent_draws)
+            UNION SELECT n2 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
+            UNION SELECT n3 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
+            UNION SELECT n4 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
+            UNION SELECT n5 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
+            UNION SELECT n6 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
+        """
+        
+        cold_query = f"""
+            WITH active_draws AS (
+                SELECT ROWID FROM draws
+                ORDER BY date DESC
+                LIMIT {cold_limit}
+            )
+            SELECT DISTINCT n1 as num FROM draws
+            WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
+            EXCEPT SELECT n1 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
+            -- Repeat for n2-n6...
+        """
+
+        hot = pd.read_sql(hot_query, self.conn)['num'].unique().tolist()
+        cold = pd.read_sql(cold_query, self.conn)['num'].unique().tolist()
+        
+        return {'hot': hot[:self.config['analysis']['top_range']], 
+                'cold': cold[:self.config['analysis']['top_range']]}
 
     def _get_draw_count(self) -> int:
         """Get total number of draws in database."""
@@ -918,47 +901,57 @@ class LotteryAnalyzer:
         
 
     def _init_weights(self):
-        """Initialize weights with recursion guard"""
-        if getattr(self, '_initializing_weights', False):
-            # Return default weights if we're already initializing
-            return pd.Series(1.0, index=self.number_pool)
-        
-        self._initializing_weights = True
-        try:
-            if self.config['analysis']['overdue_analysis']['enabled']:
-                self._init_weights_hybrid()
-            else:
-                if self.mode == 'auto':
-                    base_weights = pd.Series(1.0, index=self.number_pool)
-                    if self.config.get('prediction', {}).get('enabled', False):
-                        time_window = self.config['prediction'].get('global_time_window', 30)
-                        time_weights = pd.Series(self._get_time_weights(window=time_window)).fillna(0)
-                        global_ratio = self.config['prediction'].get('global_time_ratio', 0.15)
-                        base_weights = base_weights * (1 - global_ratio) + time_weights * global_ratio
-                    self.weights = base_weights / base_weights.sum()
-                else:
-                    weights_config = self.config.get('manual', {}).get('strategy', {}).get('weighting', {})
-                    base_weights = (
-                        weights_config.get('frequency', 0.4) * self._get_frequency_weights() +
-                        weights_config.get('recency', 0.3) * self._get_recent_weights() +
-                        weights_config.get('randomness', 0.3) * np.random.rand(len(self.number_pool))
-                    )
-                    self.weights = base_weights / base_weights.sum()
-        finally:
-            self._initializing_weights = False
-        return self.weights
+        """Initialize weights with time awareness while preserving hybrid analysis."""
+        # Preserve hybrid analysis check
+        if self.config['analysis']['overdue_analysis']['enabled']:
+            self._init_weights_hybrid()  # Keep your existing hybrid logic
+            return
 
+        # Core weight initialization (modified to include time awareness)
+        if self.mode == 'auto':
+            # Start with uniform weights
+            base_weights = pd.Series(1.0, index=self.number_pool)
+            
+            # Add time awareness if enabled
+            if self.config.get('prediction', {}).get('enabled', False):
+                time_window = self.config['prediction'].get('global_time_window', 30)
+                time_weights = pd.Series(self._get_time_weights(window=time_window)).fillna(0)
+                global_ratio = self.config['prediction'].get('global_time_ratio', 0.15)
+                base_weights = base_weights * (1 - global_ratio) + time_weights * global_ratio
+            
+            self.weights = base_weights / base_weights.sum()
+            self.learning_rate = self.config.get('auto', {}).get('learning_rate', 0.01)
+            self.decay_factor = self.config.get('auto', {}).get('decay_factor', 0.97)
+            
+        else:  # Manual mode
+            weights_config = self.config.get('manual', {}).get('strategy', {}).get('weighting', {})
+            
+            # Base weights with time awareness
+            base_weights = (
+                weights_config.get('frequency', 0.4) * self._get_frequency_weights() +
+                weights_config.get('recency', 0.3) * self._get_recent_weights() +
+                weights_config.get('randomness', 0.3) * np.random.rand(len(self.number_pool))
+            )
+            
+            # Add time awareness if enabled
+            if self.config.get('prediction', {}).get('enabled', False):
+                time_window = self.config['prediction'].get('global_time_window', 30)
+                time_weights = pd.Series(self._get_time_weights(window=time_window)).fillna(0)
+                global_ratio = self.config['prediction'].get('global_time_ratio', 0.15)
+                base_weights = base_weights * (1 - global_ratio) + time_weights * global_ratio
+            
+            # Apply cold number bonus (preserve existing logic)
+            cold_bonus = weights_config.get('resurgence', 0.1)
+            cold_nums = self.get_temperature_stats()['cold']
+            base_weights[cold_nums] *= (1 + cold_bonus)
+            
+            self.weights = base_weights / base_weights.sum()
 
+    
     def _init_weights_hybrid(self):
-        """Hybrid weight calculation with recursion guard"""
-        if getattr(self, '_initializing_weights', False):
-            return pd.Series(1.0, index=self.number_pool)
-            
+        """New hybrid weight calculation with gap + temperature support (non-destructive)"""
         try:
-            # Get temperature stats without triggering weight initialization
-            temp_stats = self._get_temperature_stats_no_init()
-            
-            # Get base weights
+            # Base weights (same as original auto/manual logic)
             if self.mode == 'auto':
                 base_weights = pd.Series(1.0, index=self.number_pool)
             else:
@@ -969,91 +962,23 @@ class LotteryAnalyzer:
                     weights_config.get('randomness', 0.3) * np.random.rand(len(self.number_pool))
                 )
 
-            # Apply cold number bonus
-            cold_nums = temp_stats['numbers']['cold']
+            # Apply cold number bonus (original behavior)
+            cold_nums = self.get_temperature_stats()['cold']
             cold_bonus = self.config['manual']['strategy']['weighting'].get('resurgence', 0.1)
             base_weights[cold_nums] *= (1 + cold_bonus)
 
-            # Apply overdue boosts
-            overdue_nums = set(self._get_overdue_numbers()) - set(cold_nums)
-            overdue_boost = self.config['analysis']['overdue_analysis']['weight_influence']
-            base_weights[list(overdue_nums)] *= (1 + overdue_boost)
+            # Apply gap analysis (new behavior)
+            if self.config['analysis']['overdue_analysis']['enabled']:
+                overdue_nums = set(self._get_overdue_numbers()) - set(cold_nums)  # Avoid overlap
+                overdue_boost = self.config['analysis']['overdue_analysis']['weight_influence']
+                base_weights[list(overdue_nums)] *= (1 + overdue_boost)
 
+            # Normalize (same as original)
             self.weights = base_weights / base_weights.sum()
-            return self.weights
+
         except Exception as e:
-            logging.warning(f"Hybrid weight init failed: {str(e)}. Falling back to original.")
-            return self._init_weights()
-
-
-    def _get_temperature_stats_no_init(self):
-        """Safe version that doesn't trigger weight initialization"""
-        if not hasattr(self, 'conn') or self.conn is None:
-            return {
-                "numbers": {"hot": [], "cold": []},
-                "primes": {"hot_primes": [], "cold_primes": []}
-            }
-
-        hot_limit = self.config['analysis']['recency_bins']['hot']
-        cold_limit = self.config['analysis']['recency_bins']['cold']
-        
-        try:
-            hot_query = f"""
-                WITH recent_draws AS (
-                    SELECT ROWID FROM draws 
-                    ORDER BY date DESC 
-                    LIMIT {hot_limit}
-                )
-                SELECT DISTINCT n1 as num FROM draws
-                WHERE ROWID IN (SELECT ROWID FROM recent_draws)
-                UNION SELECT n2 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
-                UNION SELECT n3 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
-                UNION SELECT n4 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
-                UNION SELECT n5 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
-                UNION SELECT n6 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
-            """
-            
-            cold_query = f"""
-                WITH active_draws AS (
-                    SELECT ROWID FROM draws
-                    ORDER BY date DESC
-                    LIMIT {cold_limit}
-                )
-                SELECT DISTINCT n1 as num FROM draws
-                WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
-                EXCEPT SELECT n1 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
-                UNION SELECT n2 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
-                EXCEPT SELECT n2 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
-                UNION SELECT n3 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
-                EXCEPT SELECT n3 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
-                UNION SELECT n4 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
-                EXCEPT SELECT n4 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
-                UNION SELECT n5 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
-                EXCEPT SELECT n5 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
-                UNION SELECT n6 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
-                EXCEPT SELECT n6 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
-            """
-
-            hot = [int(n) for n in pd.read_sql(hot_query, self.conn)['num'].unique().tolist()]
-            cold = [int(n) for n in pd.read_sql(cold_query, self.conn)['num'].unique().tolist()]
-            
-        except Exception as e:
-            logging.error(f"Temperature stats query failed: {str(e)}")
-            hot, cold = [], []
-
-        primes = set(self._get_prime_numbers())
-        top_n = self.config['analysis']['top_range']
-        
-        return {
-            "numbers": {
-                "hot": hot[:top_n],
-                "cold": cold[:top_n]
-            },
-            "primes": {
-                "hot_primes": [n for n in hot if n in primes][:top_n],
-                "cold_primes": [n for n in cold if n in primes][:top_n]
-            }
-        }
+            logging.warning(f"Hybrid weight init failed: {e}. Falling back to original.")
+            self._init_weights()  # Fallback to original
 
 ###################################
     def set_mode(self, mode: str):
@@ -1069,55 +994,37 @@ class LotteryAnalyzer:
 #End mode handler
 #=============================
 
-    def get_prime_stats(self) -> Dict:
-        """Enhanced prime stats with structured output"""
+    def get_prime_stats(self) -> dict:
+        """Enhanced prime analysis with safeguards"""
         try:
             draw_limit = max(1, self._get_analysis_draw_limit('primes', 500))
             hot_threshold = self.config['analysis']['primes'].get('hot_threshold', 5)
             
-            # Existing query execution
+            query = f"""
+                WITH recent_draws AS (
+                    SELECT * FROM draws ORDER BY date DESC LIMIT {draw_limit}
+                ),
+                prime_counts AS (
+                    SELECT date, 
+                           SUM(CASE WHEN n1 IN ({','.join(map(str, self.prime_numbers))}) THEN 1 ELSE 0 END) +
+                           SUM(CASE WHEN n2 IN ({','.join(map(str, self.prime_numbers))}) THEN 1 ELSE 0 END) +
+                           ... AS prime_count
+                    FROM recent_draws
+                    GROUP BY date
+                )
+                SELECT 
+                    AVG(prime_count) as avg_primes_per_draw,
+                    SUM(CASE WHEN prime_count >= 2 THEN 1 ELSE 0 END) * 100.0 / COUNT(*) as pct_two_plus_primes
+                FROM prime_counts
+            """
             result = self.conn.execute(query).fetchone()
-            
-            # Get additional prime data
-            prime_nums = self._get_prime_numbers()
-            temp_stats = self.get_temperature_stats()
-            
             return {
-                # Standard structured format
-                "analysis": "prime_stats",
-                "metadata": {
-                    "draws_analyzed": draw_limit,
-                    "hot_threshold": hot_threshold,
-                    "total_primes": len(prime_nums)
-                },
-                "stats": {
-                    "avg_primes_per_draw": round(result[0], 2),
-                    "pct_two_plus_primes": round(result[1], 1),
-                    "hot_primes": [n for n in temp_stats['numbers']['hot'] 
-                                  if n in prime_nums],
-                    "cold_primes": [n for n in temp_stats['numbers']['cold'] 
-                                   if n in prime_nums]
-                },
-                "all_primes": sorted(prime_nums),
-                
-                # Backward compatible format
-                "legacy_format": {
-                    'avg_primes': round(result[0], 2),
-                    'pct_two_plus': round(result[1], 1),
-                    'error': None
-                }
+                'avg_primes': round(result[0], 2),
+                'pct_two_plus': round(result[1], 1)
             }
-
         except sqlite3.Error as e:
-            error_msg = f"Prime stats failed: {str(e)}"
-            logging.error(error_msg)
-            return {
-                "analysis": "prime_stats",
-                "error": error_msg,
-                "legacy_format": {
-                    'error': 'Prime analysis unavailable'
-                }
-            }
+            logging.error(f"Prime stats failed: {str(e)}")
+            return {'error': 'Prime analysis unavailable'}
 
     def _is_prime(self, n: int) -> bool:
         """Helper method to check if a number is prime"""
@@ -1494,78 +1401,50 @@ class LotteryAnalyzer:
             return {'error': 'Range analysis failed'}
 
 ########################
-
     def get_combination_stats(self, size: int) -> Dict:
-        """Enhanced version with structured output and existing features"""
+        """Get statistics for number combinations of given size.
+        Returns: {
+            'average_frequency': float,
+            'most_common': {'numbers': list, 'count': int},
+            'std_deviation': float,
+            'coverage_pct': float,
+            'top_co_occurring': list(tuple)
+        }
+        """
         if not self.config.get('features', {}).get('enable_combo_stats', False):
-            return {
-                "analysis": "combination_stats",
-                "status": "disabled_in_config",
-                "size": size
-            }
+            return {}
 
         try:
             combos = self.get_combinations(size, verbose=False)
             if combos.empty:
-                return {
-                    "analysis": "combination_stats",
-                    "status": "no_data",
-                    "size": size
-                }
+                return {}
 
-            # Core calculations (preserving your existing logic)
-            total_possible = len(list(combinations(self.number_pool, size)))
+            # Calculate co-occurrence first (existing code)
             co_occurrence = defaultdict(int)
-            
             for _, row in combos.iterrows():
                 for i in range(1, size+1):
                     num = row[f'n{i}']
                     co_occurrence[num] += 1
 
+            # Get the most common combination (modified section)
             most_common_row = combos.iloc[0]
             most_common_numbers = [most_common_row[f'n{i}'] for i in range(1, size+1)]
 
-            # Build enhanced output structure
+            # New return format (replace the existing stats dictionary)
             return {
-                "analysis": "combination_stats",
-                "size": size,
-                "status": "success",
-                "summary": {
-                    "average_frequency": float(combos['frequency'].mean()),
-                    "std_deviation": float(combos['frequency'].std()),
-                    "coverage_pct": (len(combos) / total_possible) * 100,  # Fixed this line
-                    "total_possible": total_possible,
-                    "observed": len(combos)
+                'average_frequency': combos['frequency'].mean(),
+                'most_common': {
+                    'numbers': most_common_numbers,
+                    'count': most_common_row['frequency']
                 },
-                "most_common": {
-                    "numbers": most_common_numbers,
-                    "count": int(most_common_row['frequency']),
-                    "pct_of_draws": (most_common_row['frequency']/self._get_draw_count())*100
-                },
-                "co_occurrence": [
-                    {"number": num, "count": count}
-                    for num, count in sorted(co_occurrence.items(), 
-                                           key=lambda x: x[1], 
-                                           reverse=True)[:5]
-                ],
-                "top_combinations": [
-                    {
-                        "numbers": [row[f'n{i}'] for i in range(1, size+1)],
-                        "count": row['frequency'],
-                        "pct_of_draws": (row['frequency']/self._get_draw_count())*100
-                    }
-                    for _, row in combos.head(5).iterrows()
-                ]
+                'std_deviation': combos['frequency'].std(),
+                'coverage_pct': (len(combos) / len(list(combinations(self.number_pool, size)))) * 100,
+                'top_co_occurring': sorted(co_occurrence.items(), key=lambda x: x[1], reverse=True)[:5]
             }
 
         except Exception as e:
             logging.warning(f"Combination stats failed for size {size}: {str(e)}")
-            return {
-                "analysis": "combination_stats",
-                "status": "error",
-                "error": str(e),
-                "size": size
-            }
+            return {}
 
 ############################# New Added Section ###########################
 
@@ -2052,47 +1931,6 @@ class LotteryAnalyzer:
 ###########################################################################
 ########################
 
-#### ANALYSIS OUTPUT ###########
-
-class AnalysisOutput:
-    @staticmethod
-    def to_json(analyzer, numbers_to_analyze=None):
-        """Main structured output generator"""
-        if numbers_to_analyze is None:
-            numbers_to_analyze = analyzer.get_frequencies().index.tolist()[:5]
-        
-        return {
-            "metadata": {
-                "generated_at": datetime.now().isoformat(),
-                "number_pool": analyzer.config['strategy']['number_pool'],
-                "draw_count": analyzer._get_draw_count()
-            },
-            "analyses": [
-                analyzer.get_temperature_stats(),
-                analyzer.get_prime_stats(),
-                *[analyzer.get_number_trend(n) for n in numbers_to_analyze],
-                analyzer.get_combination_stats(2),
-                analyzer.get_combination_stats(3),
-                analyzer.get_overdue_trends()  # You'll need to implement this similarly
-            ]
-        }
-
-    @staticmethod
-    def to_cli(analyzer):
-        """Simplified CLI output"""
-        data = AnalysisOutput.to_json(analyzer)
-        print(f"Analysis complete for {data['metadata']['draw_count']} draws")
-        print(f"Number pool: 1-{data['metadata']['number_pool']}")
-        
-        for analysis in data['analyses']:
-            print(f"\n{analysis['analysis'].upper().replace('_', ' ')}:")
-            if analysis['analysis'] == 'number_trend':
-                print(f"Number {analysis['number']}: "
-                      f"{analysis['appearance_count']} appearances, "
-                      f"current gap {analysis['current_gap']} draws")
-
-################################
-
 # ======================
 # DASHBOARD GENERATOR
 # ======================
@@ -2567,7 +2405,7 @@ def main():
                 print("Balanced:", analyzer._generate_candidate('balanced'))  # Uses base_weights + manual picks
                 print("Aggressive:", analyzer._generate_candidate('aggressive'))  # Extra 10% recent boost
                 print("Frequent:", analyzer._generate_candidate('frequent'))  # Pure frequency-based              
-######################### FILE SAVING ###########################################
+######################### FILE SAVING ########## #################################
         # Generate and save raw sets (pre-optimization)
 # In your main() function, replace the saving section with:
 
