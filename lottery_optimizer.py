@@ -814,6 +814,42 @@ class LotteryAnalyzer:
 #######Detect Patterns Update ####### 
 ############################# Display Gap Analysis ##################
 
+    def display_gap_analysis(self, gap_data: dict) -> None:
+        """Print formatted gap analysis results (matches your requested format exactly)."""
+        if not gap_data:
+            print("Gap Analysis: Disabled in config")
+            return
+
+        cfg = self.config['analysis']['gap_analysis']
+        lookback = cfg['lookback_draws']
+        
+        print("\nGap Analysis")
+        print(f"  - Analyzed last {lookback} draws")
+        
+        # Frequency
+        if gap_data.get('frequency'):
+            top_gaps = sorted(gap_data['frequency'].items(), key=lambda x: -x[1])[:3]
+            gaps_str = " | ".join(f"{g}: {c}x ({c/lookback*100:.1f}%)" for g, c in top_gaps)
+            print(f"  - Top Gaps by Frequency: {gaps_str}")
+        
+        # Overdue
+        if gap_data.get('overdue'):
+            threshold = cfg['auto_threshold'] if cfg['mode'] == 'auto' else cfg['manual_threshold']
+            for gap in gap_data['overdue'][:1]:  # Show top 1 overdue gap
+                print(f"  - Overdue Gaps: {gap['gap']}: {gap['draws_overdue']} draws overdue "
+                      f"(avg every {gap['avg_frequency']:.1f} draws, threshold: {threshold}x)")
+        
+        # Clustering
+        if cfg['track_consecutive'] and gap_data.get('clusters'):
+            cluster_pct = gap_data['clusters']['small_gap_clusters'] / lookback * 100
+            print(f"  - Clustering: {gap_data['clusters']['small_gap_clusters']} draws "
+                  f"({cluster_pct:.1f}%) have 2+ small gaps (≤5)")
+        
+        # Recommendations
+        print("  - Prioritize sets with gaps:", ", ".join(str(g[0]) for g in sorted(gap_data['frequency'].items(), key=lambda x: -x[1])[:3]))
+        if gap_data.get('overdue'):
+            print(f"  - Consider testing gap={gap_data['overdue'][0]['gap']} (overdue)")
+        print(f"  - Avoid gaps > {cfg['max_gap_size']} (historically rare)")
  
 #####################################################################
  ############################ DISPLAY OPTIMIZED SET ##################
@@ -1997,42 +2033,7 @@ def main():
 
 ########################## GAP ANALYSIS #####################
 
-    def display_gap_analysis(self, gap_data: dict) -> None:
-        """Print formatted gap analysis results (matches your requested format exactly)."""
-        if not gap_data:
-            print("Gap Analysis: Disabled in config")
-            return
 
-        cfg = self.config['analysis']['gap_analysis']
-        lookback = cfg['lookback_draws']
-        
-        print("\nGap Analysis")
-        print(f"  - Analyzed last {lookback} draws")
-        
-        # Frequency
-        if gap_data.get('frequency'):
-            top_gaps = sorted(gap_data['frequency'].items(), key=lambda x: -x[1])[:3]
-            gaps_str = " | ".join(f"{g}: {c}x ({c/lookback*100:.1f}%)" for g, c in top_gaps)
-            print(f"  - Top Gaps by Frequency: {gaps_str}")
-        
-        # Overdue
-        if gap_data.get('overdue'):
-            threshold = cfg['auto_threshold'] if cfg['mode'] == 'auto' else cfg['manual_threshold']
-            for gap in gap_data['overdue'][:1]:  # Show top 1 overdue gap
-                print(f"  - Overdue Gaps: {gap['gap']}: {gap['draws_overdue']} draws overdue "
-                      f"(avg every {gap['avg_frequency']:.1f} draws, threshold: {threshold}x)")
-        
-        # Clustering
-        if cfg['track_consecutive'] and gap_data.get('clusters'):
-            cluster_pct = gap_data['clusters']['small_gap_clusters'] / lookback * 100
-            print(f"  - Clustering: {gap_data['clusters']['small_gap_clusters']} draws "
-                  f"({cluster_pct:.1f}%) have 2+ small gaps (≤5)")
-        
-        # Recommendations
-        print("  - Prioritize sets with gaps:", ", ".join(str(g[0]) for g in sorted(gap_data['frequency'].items(), key=lambda x: -x[1])[:3]))
-        if gap_data.get('overdue'):
-            print(f"  - Consider testing gap={gap_data['overdue'][0]['gap']} (overdue)")
-        print(f"  - Avoid gaps > {cfg['max_gap_size']} (historically rare)")
 
 #############################################################
 
