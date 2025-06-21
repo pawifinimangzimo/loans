@@ -169,6 +169,21 @@ class LotteryAnalyzer:
         except Exception as e:
             raise ValueError(f"Data loading failed: {str(e)}")
 ####################
+
+    def get_weights(self) -> dict:  
+        """Export ALL weights, including new ones."""  
+        return {  
+            'frequency': self._get_frequency_weights().to_dict(),  
+            'recency': self._get_recent_weights().to_dict(),  
+            'gaps': self._get_gap_weights(),  
+            'overdue': self._get_overdue_weights(),  
+            'primes': self._get_prime_weights(),          # New  
+            'odd_even': self._get_odd_even_weights(),     # New  
+            'sum': self._get_sum_weights(),               # New  
+            'final': self.weights.to_dict()  # Blended result  
+        }  
+
+####################
     def get_frequencies(self, count: int = None) -> pd.Series:
         """Get number frequencies using optimized SQL query"""
         top_n = count or self.config['analysis']['top_range']
