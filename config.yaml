@@ -50,6 +50,8 @@ output:
   sum_percentiles: true
 
 analysis:
+  hot_boost: 1.2       # +20% weight for hot numbers
+  cold_penalty: 0.8    # -20% weight for cold numbers
   default_match_threshold: 4    # Fallback when CLI not provided
   default_show_top: 5           # Fallback when CLI not provided
   min_display_matches: 1        # Hide single matches if needed
