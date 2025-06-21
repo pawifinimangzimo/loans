@@ -176,3 +176,7 @@ pattern_settings:
   consecutive_weight: 0.3
   same_last_digit_weight: 0.2
   prime_weight: 0.1
+  
+prediction:
+  rolling_window: 30      # Analyze last 30 draws/days
+  cooccurrence_depth: 3   # Track top 3 pairs per number

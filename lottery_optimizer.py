@@ -180,6 +180,10 @@ class LotteryAnalyzer:
             'primes': self._get_prime_weights(),          # New  
             'odd_even': self._get_odd_even_weights(),     # New  
             'sum': self._get_sum_weights(),               # New  
+            
+            'time_weights': self.get_time_weights(),
+            'cooccurrence': self.get_cooccurrence_weights(),
+            
             'final': self.weights.to_dict()  # Blended result  
         }  
 
@@ -780,6 +784,37 @@ class LotteryAnalyzer:
             num: 0.8 if num > avg * 1.15 else 1.0  # Customize thresholds as needed  
             for num in self.number_pool  
         }  
+
+
+    def _get_draws_in_window(self, window: int) -> pd.DataFrame:
+        """Get draws from the last N days/draws based on config."""
+        unit = self.config['analysis']['recency_units']  # 'draws' or 'days'
+        if unit == 'draws':
+            return pd.read_sql(f"SELECT * FROM draws ORDER BY date DESC LIMIT {window}", self.conn)
+        else:
+            cutoff = datetime.now() - timedelta(days=window)
+            return pd.read_sql("SELECT * FROM draws WHERE date >= ?", self.conn, params=(cutoff,))
+
+    def get_time_weights(self) -> dict:
+        """Calculate weights based on recent appearances (last 30 days/draws)."""
+        window = self.config['prediction'].get('rolling_window', 30)
+        recent_draws = self._get_draws_in_window(window)
+        counts = recent_draws[[f'n{i}' for i in range(1, 7)]].stack().value_counts()
+        return (counts / counts.sum()).to_dict()  # Normalize
+
+    def get_cooccurrence_weights(self) -> dict:
+        """Calculate how often numbers appear together (for all pairs)."""
+        depth = self.config['prediction'].get('cooccurrence_depth', 3)
+        cooccurrence = {}
+        for num in self.number_pool:
+            pairs = self.get_combinations(size=2)
+            related = pairs[(pairs['n1'] == num) | (pairs['n2'] == num)]
+            top_pairs = related.nlargest(depth, 'frequency')
+            cooccurrence[num] = {
+                'pairs': [p for p in top_pairs[['n1', 'n2']].values if p != num],
+                'weights': top_pairs['frequency'].to_dict()
+            }
+        return cooccurrence
 
 #########################################
     def _init_mode_handler(self):
