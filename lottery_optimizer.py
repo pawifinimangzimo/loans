@@ -692,6 +692,62 @@ class LotteryAnalyzer:
 #===============================
 ################ Weights ################
 
+
+    def _get_frequency_weights(self) -> pd.Series:
+        """
+        Convert historical frequencies to normalized weights (0-1 range).
+        Returns:
+            pd.Series: Weights indexed by number (e.g., {7: 0.035, 12: 0.028})
+        """
+        freqs = self.get_frequencies()
+        if freqs.empty:
+            return pd.Series(0, index=self.number_pool)
+        return freqs / freqs.sum()  # Normalize
+
+    def _get_recent_weights(self) -> pd.Series:
+        """
+        Weight numbers based on recency (hot/cold analysis).
+        Returns:
+            pd.Series: Weights with hot numbers boosted by 20%, cold penalized by 20%
+        """
+        temp_stats = self.get_temperature_stats()
+        weights = pd.Series(1.0, index=self.number_pool)  # Default weight = 1.0
+        
+        # Apply hot/cold adjustments from config
+        hot_boost = self.config['analysis'].get('hot_boost', 1.2)
+        cold_penalty = self.config['analysis'].get('cold_penalty', 0.8)
+        
+        weights.loc[temp_stats['hot']] *= hot_boost
+        weights.loc[temp_stats['cold']] *= cold_penalty
+        
+        return weights / weights.sum()  # Normalize
+
+    def _get_gap_weights(self) -> dict:
+        """
+        Convert gap frequencies to weights for number generation.
+        Returns:
+            dict: {gap_size: weight} (e.g., {7: 0.15, 11: 0.1})
+        """
+        if not self.config['analysis']['gap_analysis']['enabled']:
+            return {}
+        
+        gap_data = self.analyze_gaps()
+        total = sum(gap_data['frequency'].values())
+        return {gap: count/total for gap, count in gap_data['frequency'].items()}
+
+    def _get_overdue_weights(self) -> dict:
+        """
+        Get weight boosts for overdue numbers.
+        Returns:
+            dict: {number: boost_factor} (e.g., {19: 1.2, 23: 1.2})
+        """
+        if not self.config['analysis']['overdue_analysis']['enabled']:
+            return {}
+        
+        boost = self.config['analysis']['overdue_analysis'].get('weight_influence', 1.2)
+        return {num: boost for num in self._get_overdue_numbers()}
+
+
     def _get_prime_weights(self) -> dict:  
         """Boost primes by configured weight (default: +20%)."""  
         if not self.config['analysis']['primes']['enabled']:  
