@@ -2016,18 +2016,18 @@ def main():
             print(f"\n Top {top_range} Frequent Numbers:")
             print(freqs.to_string())
             
-            print(f"\n Hot Numbers (last {config['analysis']['recency_bins']['hot']} draws):")
+            print(f"\nHot Numbers (last {config['analysis']['recency_bins']['hot']} draws):")
             print(f"   Numbers: {', '.join(map(str, temp_stats['hot']))}")
             print(f"   Primes: {', '.join(map(str, prime_temp_stats['hot_primes'])) or 'None'}")
 
-            print(f"\n️ Cold Numbers ({config['analysis']['recency_bins']['cold']}+ draws unseen):")
+            print(f"\n️Cold Numbers ({config['analysis']['recency_bins']['cold']}+ draws unseen):")
             print(f"   Numbers: {', '.join(map(str, temp_stats['cold']))}")
             print(f"   Primes: {', '.join(map(str, prime_temp_stats['cold_primes'])) or 'None'}")
 
 
         # New Overdue Numbers Section
         if overdue:
-            print(f"\n Overdue Numbers ({config['analysis']['overdue_analysis']['manual_threshold']}+ draws unseen):")
+            print(f"\nOverdue Numbers ({config['analysis']['overdue_analysis']['manual_threshold']}+ draws unseen):")
             print(f"   Tracking: {len(analyzer._get_overdue_numbers())} total")
             print(f"   Numbers: {', '.join(map(str, overdue))}")
             
@@ -2081,7 +2081,7 @@ def main():
 
         range_stats = analyzer.get_number_ranges_stats()
         if not range_stats.get('error'):
-            print(f"\n🔢 Number Ranges Analysis:")
+            print(f"\nNumber Ranges Analysis:")
             print(f"   - Low ({range_stats['ranges']['low']}): {range_stats['percentages']['low']}% ({range_stats['counts']['low']} draws)")
             print(f"   - Mid ({range_stats['ranges']['mid']}): {range_stats['percentages']['mid']}% ({range_stats['counts']['mid']} draws)") 
             print(f"   - High ({range_stats['ranges']['high']}): {range_stats['percentages']['high']}% ({range_stats['counts']['high']} draws)")
@@ -2090,7 +2090,7 @@ def main():
 #==================
 # New Section
 #==================
-            print("\n🔢 Top Combinations:")
+            print("\nTop Combinations:")
             combo_config = analyzer.config['analysis']['combination_analysis']
             
             for size, size_name in [(2, 'pairs'), (3, 'triplets'), 
@@ -2136,17 +2136,17 @@ def main():
             sum_freq = analyzer.get_sum_frequencies()
 
             if not args.quiet and not sum_stats.get('error'):
-                print("\n🧮 Sum Range Analysis:")
+                print("\nSum Range Analysis:")
                 print(f"   Historical average: {sum_stats['average']}")
                 print(f"   Q1-Q3 range: {sum_stats['q1']}-{sum_stats['q3']}")
                 print(f"   Min-Max: {sum_stats['min']}-{sum_stats['max']}")
                 
-                print("\n📊 Common Sum Ranges:")
+                print("\nCommon Sum Ranges:")
                 for rng, freq in sorted(sum_freq.items(), key=lambda x: x[1], reverse=True)[:5]:
                     print(f"   {rng}: {freq} draws")
                     
 #==================
-            print("\n🎰 Recommended Number Sets:")
+            print("\nRecommended Number Sets:")
             for i, nums in enumerate(sets, 1):
                 print(f"Set {i}: {'-'.join(map(str, nums))}")
             print("\n" + "="*50)
@@ -2193,18 +2193,18 @@ def main():
             pd.DataFrame(all_sets).to_csv(path, index=False)
 
             if not args.quiet:
-                print(f"\n💾 Saved {len(raw_sets)} raw + {len(optimized_sets)} optimized sets to: {path}")
+                print(f"\nSaved {len(raw_sets)} raw + {len(optimized_sets)} optimized sets to: {path}")
 ##################################################################################
         # Generate dashboard (unless --no-dashboard)
         if not args.no_dashboard:
             dashboard = DashboardGenerator(analyzer)
             dashboard_path = dashboard.generate()
             if not args.quiet:
-                print(f"🌐 Dashboard generated at: {dashboard_path}")
+                print(f"Dashboard generated at: {dashboard_path}")
                 print("   View with: python -m http.server --directory results/dashboard 8000")
     
     except Exception as e:
-        print(f"\n❌ Error: {str(e)}")
+        print(f"\nError: {str(e)}")
         print("\nTroubleshooting:")
         print(f"1. Check {args.config} exists and is valid")
         print(f"2. Verify data/numbers are 1-{config.get('strategy',{}).get('number_pool',55)}")
