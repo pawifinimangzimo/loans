@@ -1311,19 +1311,23 @@ class LotteryAnalyzer:
         """
         results = {
             'frequency': self.get_frequencies(),
-            'gaps': self.analyze_gaps(),  # <-- Inserted here
             'primes': self.get_prime_stats(),
             'high_low': self.get_highlow_stats(),
             'metadata': {
                 'effective_draws': {
                     'primes': self._get_analysis_draw_limit('primes', 500),
                     'high_low': self._get_analysis_draw_limit('high_low', 400),
-                    'gap_analysis': self._get_analysis_draw_limit('gap_analysis', 500)  # New
+                    'gap_analysis': self._get_analysis_draw_limit('gap_analysis', 500)
                 }
             }
         }
+
+        # Gap Analysis (new with formatted output)
+        if self.config['analysis']['gap_analysis']['enabled']:
+            results['gaps'] = self.analyze_gaps()
+            self.display_gap_analysis(results['gaps'])  # <-- New formatted output
         
-        # Conditionally add overdue analysis if enabled
+        # Overdue Analysis (existing unchanged)
         if self.config['analysis']['overdue_analysis']['enabled']:
             results['overdue_analysis'] = {
                 'overdue': self.get_overdue_numbers(),
@@ -2033,7 +2037,43 @@ def main():
 
 ########################## GAP ANALYSIS #####################
 
-
+### ========== INSERT GAP ANALYSIS OUTPUT HERE ========== ###
+        if not args.quiet and analyzer.config['analysis']['gap_analysis']['enabled']:
+            gap_results = analyzer.analyze_gaps()
+            print("\nGap Analysis")
+            print(f"  - Analyzed last {analyzer.config['analysis']['gap_analysis']['lookback_draws']} draws")
+            
+            # Frequency - Single line format
+            if gap_results.get('frequency'):
+                top_gaps = sorted(gap_results['frequency'].items(), key=lambda x: -x[1])[:3]
+                gaps_str = " | ".join(f"{g}: {c}x ({c/analyzer.config['analysis']['gap_analysis']['lookback_draws']*100:.1f}%)" 
+                                    for g, c in top_gaps)
+                print(f"  - Top Gaps by Frequency: {gaps_str}")
+            
+            # Overdue - With threshold
+            if gap_results.get('overdue'):
+                threshold = (analyzer.config['analysis']['gap_analysis']['auto_threshold'] 
+                           if analyzer.config['analysis']['gap_analysis']['mode'] == 'auto' 
+                           else analyzer.config['analysis']['gap_analysis']['manual_threshold'])
+                for gap in gap_results['overdue'][:1]:  # Just show top overdue gap
+                    print(f"  - Overdue Gaps: {gap['gap']}: {gap['draws_overdue']} draws overdue "
+                         f"(avg every {gap['avg_frequency']:.1f} draws, threshold: {threshold}x)")
+            
+            # Clustering
+            if (analyzer.config['analysis']['gap_analysis']['track_consecutive'] and 
+                gap_results.get('clusters')):
+                cluster_pct = (gap_results['clusters']['small_gap_clusters'] / 
+                              analyzer.config['analysis']['gap_analysis']['lookback_draws']) * 100
+                print(f"  - Clustering: {gap_results['clusters']['small_gap_clusters']} draws "
+                     f"({cluster_pct:.1f}%) have 2+ small gaps (≤5)")
+            
+            # Recommendations
+            print("  - Prioritize sets with gaps:", 
+                 ", ".join(str(g[0]) for g in sorted(gap_results['frequency'].items(), key=lambda x: -x[1])[:3]))
+            if gap_results.get('overdue'):
+                print(f"  - Consider testing gap={gap_results['overdue'][0]['gap']} (overdue)")
+            print(f"  - Avoid gaps > {analyzer.config['analysis']['gap_analysis']['max_gap_size']} (historically rare)")
+### ========== END GAP ANALYSIS OUTPUT ========== ###
 
 #############################################################
 
