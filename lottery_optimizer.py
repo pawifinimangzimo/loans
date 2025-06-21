@@ -843,31 +843,28 @@ class LotteryAnalyzer:
 
 
     def get_time_weights(self, window: int = None) -> dict:
-        """Calculate normalized weights with NaN protection"""
+        """Enhanced time-based weights with better distribution"""
         window = window or self.config['prediction'].get('rolling_window', 30)
         
         try:
             recent_draws = self._get_draws_in_window(window)
             counts = recent_draws[[f'n{i}' for i in range(1, 7)]].stack().value_counts()
             
-            # Convert to Series with all numbers present
-            weights = pd.Series(0, index=self.number_pool)
+            # Convert to Series with all numbers present and minimum weight
+            weights = pd.Series(0.1, index=self.number_pool)  # Small base weight
             weights.update(counts)
             
-            # Handle zero-division and NaN cases
+            # Apply smoothing and normalization
             total = weights.sum()
-            if total <= 0:  # If no draws in window
-                return dict(zip(self.number_pool, [1.0/len(self.number_pool)]*len(self.number_pool)))
+            normalized = (weights / total).clip(lower=0.01)  # Ensure minimum 1% chance
+            normalized /= normalized.sum()  # Renormalize
             
-            normalized = weights / total
-            return normalized.fillna(0).to_dict()
-        
+            return {int(k): float(v) for k, v in normalized.to_dict().items()}  # Convert types
+            
         except Exception as e:
-            logging.warning(f"Time weights failed: {str(e)}")
-            # Fallback to uniform weights
-            uniform_weight = 1.0 / len(self.number_pool)
-            return {num: uniform_weight for num in self.number_pool}
-
+            logging.warning(f"Time weights fallback: {str(e)}")
+            uniform = 1.0 / len(self.number_pool)
+            return {num: uniform for num in self.number_pool}
 
     def get_cooccurrence_weights(self) -> dict:
         """Calculate how often numbers appear together (for all pairs)."""
