@@ -841,7 +841,6 @@ class LotteryAnalyzer:
             cutoff = datetime.now() - timedelta(days=window)
             return pd.read_sql("SELECT * FROM draws WHERE date >= ?", self.conn, params=(cutoff,))
 
-
     def get_time_weights(self, window: int = None) -> dict:
         """Enhanced time-based weights with better distribution"""
         window = window or self.config['prediction'].get('rolling_window', 30)
@@ -865,6 +864,7 @@ class LotteryAnalyzer:
             logging.warning(f"Time weights fallback: {str(e)}")
             uniform = 1.0 / len(self.number_pool)
             return {num: uniform for num in self.number_pool}
+
 
     def get_cooccurrence_weights(self) -> dict:
         """Calculate how often numbers appear together (for all pairs)."""
