@@ -395,54 +395,64 @@ class LotteryAnalyzer:
 
     def get_temperature_stats(self) -> Dict:
         """Enhanced temperature stats with structured output"""
+        if not hasattr(self, 'conn') or self.conn is None:
+            return {
+                "analysis": "temperature_stats",
+                "error": "Database not initialized",
+                "numbers": {"hot": [], "cold": []},
+                "primes": {"hot_primes": [], "cold_primes": []}
+            }
+
         hot_limit = self.config['analysis']['recency_bins']['hot']
         cold_limit = self.config['analysis']['recency_bins']['cold']
         
-        # Define the SQL queries (missing in your current version)
-        hot_query = f"""
-            WITH recent_draws AS (
-                SELECT ROWID FROM draws 
-                ORDER BY date DESC 
-                LIMIT {hot_limit}
-            )
-            SELECT DISTINCT n1 as num FROM draws
-            WHERE ROWID IN (SELECT ROWID FROM recent_draws)
-            UNION SELECT n2 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
-            UNION SELECT n3 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
-            UNION SELECT n4 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
-            UNION SELECT n5 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
-            UNION SELECT n6 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
-        """
-        
-        cold_query = f"""
-            WITH active_draws AS (
-                SELECT ROWID FROM draws
-                ORDER BY date DESC
-                LIMIT {cold_limit}
-            )
-            SELECT DISTINCT n1 as num FROM draws
-            WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
-            EXCEPT SELECT n1 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
-            UNION SELECT n2 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
-            EXCEPT SELECT n2 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
-            UNION SELECT n3 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
-            EXCEPT SELECT n3 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
-            UNION SELECT n4 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
-            EXCEPT SELECT n4 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
-            UNION SELECT n5 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
-            EXCEPT SELECT n5 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
-            UNION SELECT n6 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
-            EXCEPT SELECT n6 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
-        """
+        try:
+            hot_query = f"""
+                WITH recent_draws AS (
+                    SELECT ROWID FROM draws 
+                    ORDER BY date DESC 
+                    LIMIT {hot_limit}
+                )
+                SELECT DISTINCT n1 as num FROM draws
+                WHERE ROWID IN (SELECT ROWID FROM recent_draws)
+                UNION SELECT n2 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
+                UNION SELECT n3 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
+                UNION SELECT n4 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
+                UNION SELECT n5 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
+                UNION SELECT n6 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
+            """
+            
+            cold_query = f"""
+                WITH active_draws AS (
+                    SELECT ROWID FROM draws
+                    ORDER BY date DESC
+                    LIMIT {cold_limit}
+                )
+                SELECT DISTINCT n1 as num FROM draws
+                WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
+                EXCEPT SELECT n1 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
+                UNION SELECT n2 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
+                EXCEPT SELECT n2 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
+                UNION SELECT n3 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
+                EXCEPT SELECT n3 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
+                UNION SELECT n4 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
+                EXCEPT SELECT n4 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
+                UNION SELECT n5 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
+                EXCEPT SELECT n5 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
+                UNION SELECT n6 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
+                EXCEPT SELECT n6 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
+            """
 
-        # Your existing processing logic
-        hot = [int(n) for n in pd.read_sql(hot_query, self.conn)['num'].unique().tolist()]
-        cold = [int(n) for n in pd.read_sql(cold_query, self.conn)['num'].unique().tolist()]
-        
+            hot = [int(n) for n in pd.read_sql(hot_query, self.conn)['num'].unique().tolist()]
+            cold = [int(n) for n in pd.read_sql(cold_query, self.conn)['num'].unique().tolist()]
+            
+        except Exception as e:
+            logging.error(f"Temperature stats query failed: {str(e)}")
+            hot, cold = [], []
+
         primes = set(self._get_prime_numbers())
         top_n = self.config['analysis']['top_range']
         
-        # Process primes and apply limits
         hot_primes = [n for n in hot if n in primes][:top_n]
         cold_primes = [n for n in cold if n in primes][:top_n]
         hot = hot[:top_n]
