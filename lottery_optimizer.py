@@ -2013,21 +2013,21 @@ def main():
         if not args.quiet:
             print("\n" + "="*50)
             print(" LOTTERY ANALYSIS RESULTS ".center(50, "="))
-            print(f"\n🔢 Top {top_range} Frequent Numbers:")
+            print(f"\n Top {top_range} Frequent Numbers:")
             print(freqs.to_string())
             
-            print(f"\n🔥 Hot Numbers (last {config['analysis']['recency_bins']['hot']} draws):")
+            print(f"\n Hot Numbers (last {config['analysis']['recency_bins']['hot']} draws):")
             print(f"   Numbers: {', '.join(map(str, temp_stats['hot']))}")
             print(f"   Primes: {', '.join(map(str, prime_temp_stats['hot_primes'])) or 'None'}")
 
-            print(f"\n❄️ Cold Numbers ({config['analysis']['recency_bins']['cold']}+ draws unseen):")
+            print(f"\n️ Cold Numbers ({config['analysis']['recency_bins']['cold']}+ draws unseen):")
             print(f"   Numbers: {', '.join(map(str, temp_stats['cold']))}")
             print(f"   Primes: {', '.join(map(str, prime_temp_stats['cold_primes'])) or 'None'}")
 
 
         # New Overdue Numbers Section
         if overdue:
-            print(f"\n⏰ Overdue Numbers ({config['analysis']['overdue_analysis']['manual_threshold']}+ draws unseen):")
+            print(f"\n Overdue Numbers ({config['analysis']['overdue_analysis']['manual_threshold']}+ draws unseen):")
             print(f"   Tracking: {len(analyzer._get_overdue_numbers())} total")
             print(f"   Numbers: {', '.join(map(str, overdue))}")
             
