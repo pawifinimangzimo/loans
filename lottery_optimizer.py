@@ -2196,6 +2196,13 @@ def main():
                 analyzer.display_optimized_sets(valid_sets)
 
         # Save files
+        
+        
+            analyzer = LotteryAnalyzer(config)  
+            analyzer.load_data()  
+            print(analyzer.get_weights()['primes'])  # Verify primes  
+            print(analyzer.get_weights()['odd_even'])  # Verify odd-even  
+        
 ######################### FILE SAVING ###########################################
         # Generate and save raw sets (pre-optimization)
 # In your main() function, replace the saving section with:
