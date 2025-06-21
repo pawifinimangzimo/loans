@@ -2405,7 +2405,7 @@ def main():
                 print("Balanced:", analyzer._generate_candidate('balanced'))  # Uses base_weights + manual picks
                 print("Aggressive:", analyzer._generate_candidate('aggressive'))  # Extra 10% recent boost
                 print("Frequent:", analyzer._generate_candidate('frequent'))  # Pure frequency-based              
-######################### FILE SAVING ###########################################
+######################### FILE SAVING ########## #################################
         # Generate and save raw sets (pre-optimization)
 # In your main() function, replace the saving section with:
 
