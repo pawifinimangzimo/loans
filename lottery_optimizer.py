@@ -2439,7 +2439,7 @@ def main():
             if not args.quiet:
                 print(f"\nSaved {len(raw_sets)} raw + {len(optimized_sets)} optimized sets to: {path}")
 ##################################################################################
-        # Generate dashboard (unless --no-dashboard)
+        # Generate dashboard (unless --no-dashboard) 
         if not args.no_dashboard:
             dashboard = DashboardGenerator(analyzer)
             dashboard_path = dashboard.generate()
