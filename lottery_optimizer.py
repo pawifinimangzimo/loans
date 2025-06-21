@@ -2401,7 +2401,7 @@ def main():
                 analyzer.display_optimized_sets(valid_sets)
 
         # Save files
-            if self.config['output']['verbose']['true']: 
+            if config['output']['verbose']['true']: 
                 print("Balanced:", analyzer._generate_candidate('balanced'))  # Uses base_weights + manual picks
                 print("Aggressive:", analyzer._generate_candidate('aggressive'))  # Extra 10% recent boost
                 print("Frequent:", analyzer._generate_candidate('frequent'))  # Pure frequency-based              
