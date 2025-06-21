@@ -841,15 +841,33 @@ class LotteryAnalyzer:
             cutoff = datetime.now() - timedelta(days=window)
             return pd.read_sql("SELECT * FROM draws WHERE date >= ?", self.conn, params=(cutoff,))
 
+
     def get_time_weights(self, window: int = None) -> dict:
-        """Calculate weights based on recent appearances.
-        Args:
-            window: Optional override of config's rolling_window
-        """
+        """Calculate normalized weights with NaN protection"""
         window = window or self.config['prediction'].get('rolling_window', 30)
-        recent_draws = self._get_draws_in_window(window)
-        counts = recent_draws[[f'n{i}' for i in range(1, 7)]].stack().value_counts()
-        return (counts / counts.sum()).to_dict()
+        
+        try:
+            recent_draws = self._get_draws_in_window(window)
+            counts = recent_draws[[f'n{i}' for i in range(1, 7)]].stack().value_counts()
+            
+            # Convert to Series with all numbers present
+            weights = pd.Series(0, index=self.number_pool)
+            weights.update(counts)
+            
+            # Handle zero-division and NaN cases
+            total = weights.sum()
+            if total <= 0:  # If no draws in window
+                return dict(zip(self.number_pool, [1.0/len(self.number_pool)]*len(self.number_pool)))
+            
+            normalized = weights / total
+            return normalized.fillna(0).to_dict()
+        
+        except Exception as e:
+            logging.warning(f"Time weights failed: {str(e)}")
+            # Fallback to uniform weights
+            uniform_weight = 1.0 / len(self.number_pool)
+            return {num: uniform_weight for num in self.number_pool}
+
 
     def get_cooccurrence_weights(self) -> dict:
         """Calculate how often numbers appear together (for all pairs)."""
