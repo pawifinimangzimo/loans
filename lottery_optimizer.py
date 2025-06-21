@@ -394,91 +394,23 @@ class LotteryAnalyzer:
 #######################
 
     def get_temperature_stats(self) -> Dict:
-        """Enhanced temperature stats with structured output"""
-        if not hasattr(self, 'conn') or self.conn is None:
-            return {
-                "analysis": "temperature_stats",
-                "error": "Database not initialized",
-                "numbers": {"hot": [], "cold": []},
-                "primes": {"hot_primes": [], "cold_primes": []}
-            }
-
-        hot_limit = self.config['analysis']['recency_bins']['hot']
-        cold_limit = self.config['analysis']['recency_bins']['cold']
-        
-        try:
-            hot_query = f"""
-                WITH recent_draws AS (
-                    SELECT ROWID FROM draws 
-                    ORDER BY date DESC 
-                    LIMIT {hot_limit}
-                )
-                SELECT DISTINCT n1 as num FROM draws
-                WHERE ROWID IN (SELECT ROWID FROM recent_draws)
-                UNION SELECT n2 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
-                UNION SELECT n3 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
-                UNION SELECT n4 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
-                UNION SELECT n5 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
-                UNION SELECT n6 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
-            """
-            
-            cold_query = f"""
-                WITH active_draws AS (
-                    SELECT ROWID FROM draws
-                    ORDER BY date DESC
-                    LIMIT {cold_limit}
-                )
-                SELECT DISTINCT n1 as num FROM draws
-                WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
-                EXCEPT SELECT n1 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
-                UNION SELECT n2 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
-                EXCEPT SELECT n2 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
-                UNION SELECT n3 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
-                EXCEPT SELECT n3 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
-                UNION SELECT n4 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
-                EXCEPT SELECT n4 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
-                UNION SELECT n5 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
-                EXCEPT SELECT n5 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
-                UNION SELECT n6 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
-                EXCEPT SELECT n6 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
-            """
-
-            hot = [int(n) for n in pd.read_sql(hot_query, self.conn)['num'].unique().tolist()]
-            cold = [int(n) for n in pd.read_sql(cold_query, self.conn)['num'].unique().tolist()]
-            
-        except Exception as e:
-            logging.error(f"Temperature stats query failed: {str(e)}")
-            hot, cold = [], []
-
-        primes = set(self._get_prime_numbers())
-        top_n = self.config['analysis']['top_range']
-        
-        hot_primes = [n for n in hot if n in primes][:top_n]
-        cold_primes = [n for n in cold if n in primes][:top_n]
-        hot = hot[:top_n]
-        cold = cold[:top_n]
-        
+        """Public method that maintains the original interface"""
+        stats = self._get_temperature_stats_no_init()
         return {
             "analysis": "temperature_stats",
             "metadata": {
-                "hot_threshold": hot_limit,
-                "cold_threshold": cold_limit,
-                "top_range": top_n
+                "hot_threshold": self.config['analysis']['recency_bins']['hot'],
+                "cold_threshold": self.config['analysis']['recency_bins']['cold'],
+                "top_range": self.config['analysis']['top_range']
             },
-            "numbers": {
-                "hot": hot,
-                "cold": cold
-            },
-            "primes": {
-                "hot_primes": hot_primes,
-                "cold_primes": cold_primes
-            },
+            "numbers": stats["numbers"],
+            "primes": stats["primes"],
             "legacy_format": {
-                'hot': hot,
-                'cold': cold
+                'hot': stats["numbers"]["hot"],
+                'cold': stats["numbers"]["cold"]
             }
         }
-
+ 
 #######################
 
     def _get_draw_count(self) -> int:
@@ -986,57 +918,47 @@ class LotteryAnalyzer:
         
 
     def _init_weights(self):
-        """Initialize weights with time awareness while preserving hybrid analysis."""
-        # Preserve hybrid analysis check
-        if self.config['analysis']['overdue_analysis']['enabled']:
-            self._init_weights_hybrid()  # Keep your existing hybrid logic
-            return
-
-        # Core weight initialization (modified to include time awareness)
-        if self.mode == 'auto':
-            # Start with uniform weights
-            base_weights = pd.Series(1.0, index=self.number_pool)
-            
-            # Add time awareness if enabled
-            if self.config.get('prediction', {}).get('enabled', False):
-                time_window = self.config['prediction'].get('global_time_window', 30)
-                time_weights = pd.Series(self._get_time_weights(window=time_window)).fillna(0)
-                global_ratio = self.config['prediction'].get('global_time_ratio', 0.15)
-                base_weights = base_weights * (1 - global_ratio) + time_weights * global_ratio
-            
-            self.weights = base_weights / base_weights.sum()
-            self.learning_rate = self.config.get('auto', {}).get('learning_rate', 0.01)
-            self.decay_factor = self.config.get('auto', {}).get('decay_factor', 0.97)
-            
-        else:  # Manual mode
-            weights_config = self.config.get('manual', {}).get('strategy', {}).get('weighting', {})
-            
-            # Base weights with time awareness
-            base_weights = (
-                weights_config.get('frequency', 0.4) * self._get_frequency_weights() +
-                weights_config.get('recency', 0.3) * self._get_recent_weights() +
-                weights_config.get('randomness', 0.3) * np.random.rand(len(self.number_pool))
-            )
-            
-            # Add time awareness if enabled
-            if self.config.get('prediction', {}).get('enabled', False):
-                time_window = self.config['prediction'].get('global_time_window', 30)
-                time_weights = pd.Series(self._get_time_weights(window=time_window)).fillna(0)
-                global_ratio = self.config['prediction'].get('global_time_ratio', 0.15)
-                base_weights = base_weights * (1 - global_ratio) + time_weights * global_ratio
-            
-            # Apply cold number bonus (preserve existing logic)
-            cold_bonus = weights_config.get('resurgence', 0.1)
-            cold_nums = self.get_temperature_stats()['cold']
-            base_weights[cold_nums] *= (1 + cold_bonus)
-            
-            self.weights = base_weights / base_weights.sum()
-
-    
-    def _init_weights_hybrid(self):
-        """New hybrid weight calculation with gap + temperature support (non-destructive)"""
+        """Initialize weights with recursion guard"""
+        if getattr(self, '_initializing_weights', False):
+            # Return default weights if we're already initializing
+            return pd.Series(1.0, index=self.number_pool)
+        
+        self._initializing_weights = True
         try:
-            # Base weights (same as original auto/manual logic)
+            if self.config['analysis']['overdue_analysis']['enabled']:
+                self._init_weights_hybrid()
+            else:
+                if self.mode == 'auto':
+                    base_weights = pd.Series(1.0, index=self.number_pool)
+                    if self.config.get('prediction', {}).get('enabled', False):
+                        time_window = self.config['prediction'].get('global_time_window', 30)
+                        time_weights = pd.Series(self._get_time_weights(window=time_window)).fillna(0)
+                        global_ratio = self.config['prediction'].get('global_time_ratio', 0.15)
+                        base_weights = base_weights * (1 - global_ratio) + time_weights * global_ratio
+                    self.weights = base_weights / base_weights.sum()
+                else:
+                    weights_config = self.config.get('manual', {}).get('strategy', {}).get('weighting', {})
+                    base_weights = (
+                        weights_config.get('frequency', 0.4) * self._get_frequency_weights() +
+                        weights_config.get('recency', 0.3) * self._get_recent_weights() +
+                        weights_config.get('randomness', 0.3) * np.random.rand(len(self.number_pool))
+                    )
+                    self.weights = base_weights / base_weights.sum()
+        finally:
+            self._initializing_weights = False
+        return self.weights
+
+
+    def _init_weights_hybrid(self):
+        """Hybrid weight calculation with recursion guard"""
+        if getattr(self, '_initializing_weights', False):
+            return pd.Series(1.0, index=self.number_pool)
+            
+        try:
+            # Get temperature stats without triggering weight initialization
+            temp_stats = self._get_temperature_stats_no_init()
+            
+            # Get base weights
             if self.mode == 'auto':
                 base_weights = pd.Series(1.0, index=self.number_pool)
             else:
@@ -1047,23 +969,91 @@ class LotteryAnalyzer:
                     weights_config.get('randomness', 0.3) * np.random.rand(len(self.number_pool))
                 )
 
-            # Apply cold number bonus (original behavior)
-            cold_nums = self.get_temperature_stats()['cold']
+            # Apply cold number bonus
+            cold_nums = temp_stats['numbers']['cold']
             cold_bonus = self.config['manual']['strategy']['weighting'].get('resurgence', 0.1)
             base_weights[cold_nums] *= (1 + cold_bonus)
 
-            # Apply gap analysis (new behavior)
-            if self.config['analysis']['overdue_analysis']['enabled']:
-                overdue_nums = set(self._get_overdue_numbers()) - set(cold_nums)  # Avoid overlap
-                overdue_boost = self.config['analysis']['overdue_analysis']['weight_influence']
-                base_weights[list(overdue_nums)] *= (1 + overdue_boost)
+            # Apply overdue boosts
+            overdue_nums = set(self._get_overdue_numbers()) - set(cold_nums)
+            overdue_boost = self.config['analysis']['overdue_analysis']['weight_influence']
+            base_weights[list(overdue_nums)] *= (1 + overdue_boost)
 
-            # Normalize (same as original)
             self.weights = base_weights / base_weights.sum()
-
+            return self.weights
         except Exception as e:
-            logging.warning(f"Hybrid weight init failed: {e}. Falling back to original.")
-            self._init_weights()  # Fallback to original
+            logging.warning(f"Hybrid weight init failed: {str(e)}. Falling back to original.")
+            return self._init_weights()
+
+
+    def _get_temperature_stats_no_init(self):
+        """Safe version that doesn't trigger weight initialization"""
+        if not hasattr(self, 'conn') or self.conn is None:
+            return {
+                "numbers": {"hot": [], "cold": []},
+                "primes": {"hot_primes": [], "cold_primes": []}
+            }
+
+        hot_limit = self.config['analysis']['recency_bins']['hot']
+        cold_limit = self.config['analysis']['recency_bins']['cold']
+        
+        try:
+            hot_query = f"""
+                WITH recent_draws AS (
+                    SELECT ROWID FROM draws 
+                    ORDER BY date DESC 
+                    LIMIT {hot_limit}
+                )
+                SELECT DISTINCT n1 as num FROM draws
+                WHERE ROWID IN (SELECT ROWID FROM recent_draws)
+                UNION SELECT n2 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
+                UNION SELECT n3 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
+                UNION SELECT n4 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
+                UNION SELECT n5 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
+                UNION SELECT n6 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
+            """
+            
+            cold_query = f"""
+                WITH active_draws AS (
+                    SELECT ROWID FROM draws
+                    ORDER BY date DESC
+                    LIMIT {cold_limit}
+                )
+                SELECT DISTINCT n1 as num FROM draws
+                WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
+                EXCEPT SELECT n1 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
+                UNION SELECT n2 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
+                EXCEPT SELECT n2 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
+                UNION SELECT n3 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
+                EXCEPT SELECT n3 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
+                UNION SELECT n4 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
+                EXCEPT SELECT n4 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
+                UNION SELECT n5 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
+                EXCEPT SELECT n5 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
+                UNION SELECT n6 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
+                EXCEPT SELECT n6 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
+            """
+
+            hot = [int(n) for n in pd.read_sql(hot_query, self.conn)['num'].unique().tolist()]
+            cold = [int(n) for n in pd.read_sql(cold_query, self.conn)['num'].unique().tolist()]
+            
+        except Exception as e:
+            logging.error(f"Temperature stats query failed: {str(e)}")
+            hot, cold = [], []
+
+        primes = set(self._get_prime_numbers())
+        top_n = self.config['analysis']['top_range']
+        
+        return {
+            "numbers": {
+                "hot": hot[:top_n],
+                "cold": cold[:top_n]
+            },
+            "primes": {
+                "hot_primes": [n for n in hot if n in primes][:top_n],
+                "cold_primes": [n for n in cold if n in primes][:top_n]
+            }
+        }
 
 ###################################
     def set_mode(self, mode: str):
