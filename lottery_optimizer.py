@@ -841,12 +841,15 @@ class LotteryAnalyzer:
             cutoff = datetime.now() - timedelta(days=window)
             return pd.read_sql("SELECT * FROM draws WHERE date >= ?", self.conn, params=(cutoff,))
 
-    def get_time_weights(self) -> dict:
-        """Calculate weights based on recent appearances (last 30 days/draws)."""
-        window = self.config['prediction'].get('rolling_window', 30)
+    def get_time_weights(self, window: int = None) -> dict:
+        """Calculate weights based on recent appearances.
+        Args:
+            window: Optional override of config's rolling_window
+        """
+        window = window or self.config['prediction'].get('rolling_window', 30)
         recent_draws = self._get_draws_in_window(window)
         counts = recent_draws[[f'n{i}' for i in range(1, 7)]].stack().value_counts()
-        return (counts / counts.sum()).to_dict()  # Normalize
+        return (counts / counts.sum()).to_dict()
 
     def get_cooccurrence_weights(self) -> dict:
         """Calculate how often numbers appear together (for all pairs)."""
