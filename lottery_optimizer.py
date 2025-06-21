@@ -2198,10 +2198,10 @@ def main():
         # Save files
         
         
-            analyzer = LotteryAnalyzer(config)  
-            analyzer.load_data()  
-            print(analyzer.get_weights()['primes'])  # Verify primes  
-            print(analyzer.get_weights()['odd_even'])  # Verify odd-even  
+     #       analyzer = LotteryAnalyzer(config)  
+      #      analyzer.load_data()  
+       #     print(analyzer.get_weights()['primes'])  # Verify primes  
+        #    print(analyzer.get_weights()['odd_even'])  # Verify odd-even  
         
 ######################### FILE SAVING ###########################################
         # Generate and save raw sets (pre-optimization)
