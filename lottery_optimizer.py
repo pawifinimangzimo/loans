@@ -391,29 +391,64 @@ class LotteryAnalyzer:
 
 #=======================
 
+#######################
+
     def get_temperature_stats(self) -> Dict:
         """Enhanced temperature stats with structured output"""
-        # Existing hot/cold calculation
         hot_limit = self.config['analysis']['recency_bins']['hot']
         cold_limit = self.config['analysis']['recency_bins']['cold']
         
-        hot = pd.read_sql(hot_query, self.conn)['num'].unique().tolist()
-        cold = pd.read_sql(cold_query, self.conn)['num'].unique().tolist()
+        # Define the SQL queries (missing in your current version)
+        hot_query = f"""
+            WITH recent_draws AS (
+                SELECT ROWID FROM draws 
+                ORDER BY date DESC 
+                LIMIT {hot_limit}
+            )
+            SELECT DISTINCT n1 as num FROM draws
+            WHERE ROWID IN (SELECT ROWID FROM recent_draws)
+            UNION SELECT n2 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
+            UNION SELECT n3 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
+            UNION SELECT n4 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
+            UNION SELECT n5 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
+            UNION SELECT n6 FROM draws WHERE ROWID IN (SELECT ROWID FROM recent_draws)
+        """
         
-        # Additional prime classification
+        cold_query = f"""
+            WITH active_draws AS (
+                SELECT ROWID FROM draws
+                ORDER BY date DESC
+                LIMIT {cold_limit}
+            )
+            SELECT DISTINCT n1 as num FROM draws
+            WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
+            EXCEPT SELECT n1 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
+            UNION SELECT n2 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
+            EXCEPT SELECT n2 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
+            UNION SELECT n3 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
+            EXCEPT SELECT n3 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
+            UNION SELECT n4 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
+            EXCEPT SELECT n4 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
+            UNION SELECT n5 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
+            EXCEPT SELECT n5 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
+            UNION SELECT n6 FROM draws WHERE ROWID NOT IN (SELECT ROWID FROM active_draws)
+            EXCEPT SELECT n6 FROM draws WHERE ROWID IN (SELECT ROWID FROM active_draws)
+        """
+
+        # Your existing processing logic
+        hot = [int(n) for n in pd.read_sql(hot_query, self.conn)['num'].unique().tolist()]
+        cold = [int(n) for n in pd.read_sql(cold_query, self.conn)['num'].unique().tolist()]
+        
         primes = set(self._get_prime_numbers())
-        hot_primes = [n for n in hot if n in primes]
-        cold_primes = [n for n in cold if n in primes]
-        
-        # Apply top_range limit
         top_n = self.config['analysis']['top_range']
+        
+        # Process primes and apply limits
+        hot_primes = [n for n in hot if n in primes][:top_n]
+        cold_primes = [n for n in cold if n in primes][:top_n]
         hot = hot[:top_n]
         cold = cold[:top_n]
-        hot_primes = hot_primes[:top_n]
-        cold_primes = cold_primes[:top_n]
         
         return {
-            # Structured format
             "analysis": "temperature_stats",
             "metadata": {
                 "hot_threshold": hot_limit,
@@ -421,19 +456,20 @@ class LotteryAnalyzer:
                 "top_range": top_n
             },
             "numbers": {
-                "hot": [int(n) for n in hot],
-                "cold": [int(n) for n in cold]
+                "hot": hot,
+                "cold": cold
             },
             "primes": {
-                "hot_primes": [int(n) for n in hot_primes],
-                "cold_primes": [int(n) for n in cold_primes]
+                "hot_primes": hot_primes,
+                "cold_primes": cold_primes
             },
-            # Backward compatible format
             "legacy_format": {
                 'hot': hot,
                 'cold': cold
             }
         }
+
+#######################
 
     def _get_draw_count(self) -> int:
         """Get total number of draws in database."""
