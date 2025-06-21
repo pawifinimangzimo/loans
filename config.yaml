@@ -113,7 +113,8 @@ analysis:
   primes:
     enabled: true 
     draws: 500
-    hot_threshold: 5    
+    hot_threshold: 5
+    prime_weight: 1.2     
   high_low:
     draws: 400          # Middle ground in 300-500 range
     recency_weight: 0.3
@@ -137,6 +138,9 @@ analysis:
       enabled: true
       ideal_range: [30, 70]  # Min-max % of even numbers
       strict: false  # If true, rejects all-even/odd sets
+    
+      weight_penalty: 0.9 # 10% penalty for odds  
+      weight_boost: 1.1   # 10% boost for evens  
     
     # Keep existing pattern settings (they'll still work)
     consecutive_weight: 0.3 

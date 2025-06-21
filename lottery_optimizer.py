@@ -675,7 +675,42 @@ class LotteryAnalyzer:
 #==============================
 # Mode Handler 
 #===============================
+################ Weights ################
 
+    def _get_prime_weights(self) -> dict:  
+        """Boost primes by configured weight (default: +20%)."""  
+        if not self.config['analysis']['primes']['enabled']:  
+            return {}  
+        return {  
+            num: self.config['analysis']['primes'].get('prime_weight', 1.2)  
+            for num in self._get_prime_numbers()  
+        }  
+
+
+    def _get_odd_even_weights(self) -> dict:  
+        """Penalize overrepresented odds/evens softly."""  
+        if not self.config['analysis']['patterns']['odd_even']['enabled']:  
+            return {}  
+        penalty = self.config['analysis']['patterns']['odd_even'].get('weight_penalty', 0.9)  
+        boost = self.config['analysis']['patterns']['odd_even'].get('weight_boost', 1.1)  
+        return {  
+            num: penalty if num % 2 != 0 else boost  # Penalize odds, boost evens  
+            for num in self.number_pool  
+        }  
+
+
+    def _get_sum_weights(self) -> dict:  
+        """Penalize numbers pushing sums outside Q1-Q3 range."""  
+        sum_stats = self.get_sum_stats()  
+        if sum_stats.get('error'):  
+            return {}  
+        avg = sum_stats['average']  
+        return {  
+            num: 0.8 if num > avg * 1.15 else 1.0  # Customize thresholds as needed  
+            for num in self.number_pool  
+        }  
+
+#########################################
     def _init_mode_handler(self):
         """Initialize mode and weights (now hybrid-aware)"""
         self.mode = self.config.get('mode', 'auto')
