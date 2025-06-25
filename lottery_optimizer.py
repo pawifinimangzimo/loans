@@ -5,15 +5,7 @@ COMPLETE LOTTERY OPTIMIZER WITH DASHBOARD
 - Pandas analysis
 - Self-contained HTML dashboard
 """
-import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Embedding
-from sklearn.ensemble import RandomForestClassifier
-from xgboost import XGBClassifier
-from statsmodels.tsa.arima.model import ARIMA
-from statsmodels.tsa.holtwinters import ExponentialSmoothing
-import warnings
-warnings.filterwarnings('ignore')
+
 import sqlite3
 import pandas as pd
 import numpy as np
