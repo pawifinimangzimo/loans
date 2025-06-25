@@ -5,7 +5,10 @@ COMPLETE LOTTERY OPTIMIZER WITH DASHBOARD
 - Pandas analysis
 - Self-contained HTML dashboard
 """
-
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+import warnings
+warnings.filterwarnings('ignore')
 import sqlite3
 import pandas as pd
 import numpy as np
